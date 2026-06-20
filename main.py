@@ -18,7 +18,7 @@ API_HASH = 'dadc7b78300b20ef5ebe277713d6478e'
 BOT_TOKEN = '8481823831:AAGyewGoeYKXBgTlBYbX5b7JnluzYQIZhiM'
 
 ADMIN_IDS = [6506943274]
-PVT_CHANNEL_ID = (-1002200268580)
+PVT_CHANNEL_ID = -1002200268580
 
 # Required channels to join
 REQUIRED_CHATS = [
@@ -93,7 +93,7 @@ DARK_EMOJIS = {
     "robot": "🤖",
 }
 
-bot = TelegramClient('dark_checker_bot', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
+bot = TelegramClient('dark_checker_bot', API_ID, API_HASH)
 active_sessions = {}
 ACTIVE_FILTER = "all"
 REFERRAL_FILE = 'referrals.json'
@@ -128,7 +128,7 @@ def get_user_credits(user_id):
         credits_data[uid] = 0
         save_credits(credits_data)
         return 0
-    return credits_data.get(uid, 0)
+    return credits_data[uid]
 
 def add_credits(user_id, amount):
     credits_data = load_credits()
@@ -153,85 +153,24 @@ def deduct_credit(user_id):
     if current >= 1:
         credits_data[uid] = current - 1
         save_credits(credits_data)
-        return True, credits_data[uid]
-    return False, current
+        return True
+    return False
 
-# ========== CREDIT KEYS SYSTEM ==========
-def load_credit_keys():
-    if not os.path.exists(CREDIT_KEYS_FILE):
+# ========== REFERRAL SYSTEM ==========
+def load_referrals():
+    if not os.path.exists(REFERRAL_FILE):
         return {}
     try:
-        with open(CREDIT_KEYS_FILE, 'r', encoding='utf-8') as f:
+        with open(REFERRAL_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
     except:
         return {}
 
-def save_credit_keys(keys_data):
-    try:
-        with open(CREDIT_KEYS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(keys_data, f, indent=4)
-    except:
-        pass
+def save_referrals(data):
+    with open(REFERRAL_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=4)
 
-def generate_credit_key(amount):
-    key = ''.join(random.choices(string.ascii_uppercase + string.digits, k=12))
-    keys_data = load_credit_keys()
-    keys_data[key] = {
-        'credits': amount,
-        'used': False,
-        'created_at': datetime.now().isoformat()
-    }
-    save_credit_keys(keys_data)
-    return key
-
-def redeem_credit_key(key, user_id):
-    keys_data = load_credit_keys()
-    if key not in keys_data:
-        return False, "Invalid credit key"
-    if keys_data[key]['used']:
-        return False, "Key already used"
-    
-    credits = keys_data[key]['credits']
-    add_credits(user_id, credits)
-    
-    keys_data[key]['used'] = True
-    keys_data[key]['used_by'] = user_id
-    keys_data[key]['used_at'] = datetime.now().isoformat()
-    save_credit_keys(keys_data)
-    
-    return True, credits
-
-# ========== PREMIUM KEYS SYSTEM ==========
-def load_keys():
-    if not os.path.exists(KEYS_FILE):
-        return {}
-    try:
-        with open(KEYS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except:
-        return {}
-
-def save_keys(keys_data):
-    try:
-        with open(KEYS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(keys_data, f, indent=4)
-    except:
-        pass
-
-def generate_premium_key(plan_key, days, credits):
-    key = ''.join(random.choices(string.ascii_uppercase + string.digits, k=12))
-    keys_data = load_keys()
-    keys_data[key] = {
-        'type': 'premium',
-        'plan': plan_key,
-        'days': days,
-        'credits': credits,
-        'used': False,
-        'created_at': datetime.now().isoformat()
-    }
-    save_keys(keys_data)
-    return key
-
+# ========== PREMIUM SYSTEM ==========
 def load_premium_users():
     if not os.path.exists(PREMIUM_FILE):
         return {}
@@ -248,65 +187,63 @@ def save_premium_users(premium_data):
     except:
         pass
 
-def is_premium(user_id):
-    premium_data = load_premium_users()
-    user_data = premium_data.get(str(user_id))
-    if not user_data:
-        return False
-    expiry = datetime.fromisoformat(user_data['expiry'])
-    if datetime.now() > expiry:
-        del premium_data[str(user_id)]
-        save_premium_users(premium_data)
-        return False
-    return True
+def load_keys():
+    if not os.path.exists(KEYS_FILE):
+        return {}
+    try:
+        with open(KEYS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except:
+        return {}
+
+def save_keys(keys_data):
+    with open(KEYS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(keys_data, f, indent=4)
+
+def load_credit_keys():
+    if not os.path.exists(CREDIT_KEYS_FILE):
+        return {}
+    try:
+        with open(CREDIT_KEYS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except:
+        return {}
+
+def save_credit_keys(keys_data):
+    with open(CREDIT_KEYS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(keys_data, f, indent=4)
 
 def get_user_plan_name(user_id):
     premium_data = load_premium_users()
-    user_data = premium_data.get(str(user_id))
-    if not user_data:
-        return "FREE"
-    plan_key = user_data.get('plan_key', '')
-    if plan_key and plan_key in PLANS:
-        return PLANS[plan_key]['name']
-    return "CUSTOM"
+    uid = str(user_id)
+    if uid in premium_data:
+        plan_key = premium_data[uid].get('plan', 'trial')
+        return PLANS.get(plan_key, {}).get('name', 'FREE')
+    return 'FREE'
+
+def is_premium(user_id):
+    premium_data = load_premium_users()
+    uid = str(user_id)
+    if uid in premium_data:
+        try:
+            expiry = datetime.fromisoformat(premium_data[uid]['expiry'])
+            if datetime.now() < expiry:
+                return True
+        except:
+            return False
+    return False
 
 def add_premium_user(user_id, plan_key, days, credits):
     premium_data = load_premium_users()
-    expiry = datetime.now() + timedelta(days=days)
-    premium_data[str(user_id)] = {
-        'expiry': expiry.isoformat(),
-        'added_at': datetime.now().isoformat(),
-        'days': days,
-        'credits': credits,
-        'plan_key': plan_key
+    uid = str(user_id)
+    expiry = (datetime.now() + timedelta(days=days)).isoformat()
+    premium_data[uid] = {
+        'plan': plan_key,
+        'expiry': expiry,
+        'credits_added': credits
     }
     save_premium_users(premium_data)
     add_credits(user_id, credits)
-
-def redeem_premium_key(key, user_id):
-    keys_data = load_keys()
-    if key not in keys_data:
-        return False, "Invalid premium key"
-    if keys_data[key]['used']:
-        return False, "Key already used"
-    if is_premium(user_id):
-        return False, "You already have premium access"
-    
-    days = keys_data[key]['days']
-    credits = keys_data[key]['credits']
-    plan_key = keys_data[key]['plan']
-    
-    add_premium_user(user_id, plan_key, days, credits)
-    
-    keys_data[key]['used'] = True
-    keys_data[key]['used_by'] = user_id
-    keys_data[key]['used_at'] = datetime.now().isoformat()
-    save_keys(keys_data)
-    
-    if plan_key == 'custom':
-        return True, f"Redeemed custom premium: {days} days + {credits} credits!"
-    else:
-        return True, f"Redeemed {PLANS[plan_key]['name']} plan! {days} days + {credits} credits!"
 
 # ========== RESOLVE CHAT IDS ==========
 async def resolve_chat_ids():
@@ -351,103 +288,36 @@ def get_file_lines(filepath):
     except:
         return []
 
-def load_banned_users():
-    return get_file_lines(BANNED_FILE)
-
 def is_banned(user_id):
-    banned = load_banned_users()
-    return str(user_id) in banned
+    if not os.path.exists(BANNED_FILE):
+        return False
+    try:
+        with open(BANNED_FILE, 'r', encoding='utf-8') as f:
+            banned = [line.strip() for line in f if line.strip()]
+        return str(user_id) in banned
+    except:
+        return False
 
 def ban_user(user_id):
-    with open(BANNED_FILE, 'a', encoding='utf-8') as f:
-        f.write(f"{user_id}\n")
+    uid = str(user_id)
+    if not is_banned(uid):
+        with open(BANNED_FILE, 'a', encoding='utf-8') as f:
+            f.write(f"{uid}\n")
 
 def unban_user(user_id):
-    banned = load_banned_users()
-    if str(user_id) in banned:
-        banned.remove(str(user_id))
+    uid = str(user_id)
+    if not os.path.exists(BANNED_FILE):
+        return
+    try:
+        with open(BANNED_FILE, 'r', encoding='utf-8') as f:
+            lines = [line.strip() for line in f if line.strip() and line.strip() != uid]
         with open(BANNED_FILE, 'w', encoding='utf-8') as f:
-            for uid in banned:
-                f.write(f"{uid}\n")
-
-# ========== GROUP SETTINGS SYSTEM ==========
-def load_group_settings():
-    if not os.path.exists(GROUP_SETTINGS_FILE):
-        return {}
-    try:
-        with open(GROUP_SETTINGS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except:
-        return {}
-
-def save_group_settings(settings_data):
-    try:
-        with open(GROUP_SETTINGS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(settings_data, f, indent=4)
+            for line in lines:
+                f.write(f"{line}\n")
     except:
         pass
 
-def is_group_enabled(chat_id):
-    settings = load_group_settings()
-    return settings.get(str(chat_id), False)
-
-def set_group_enabled(chat_id, enabled):
-    settings = load_group_settings()
-    settings[str(chat_id)] = enabled
-    save_group_settings(settings)
-    return True
-
-# ========== USER PROXIES SYSTEM ==========
-def load_user_proxies():
-    if not os.path.exists(USER_PROXIES_FILE):
-        return {}
-    try:
-        with open(USER_PROXIES_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except:
-        return {}
-
-def save_user_proxies(proxies_data):
-    try:
-        with open(USER_PROXIES_FILE, 'w', encoding='utf-8') as f:
-            json.dump(proxies_data, f, indent=4)
-    except:
-        pass
-
-def get_user_specific_proxies(user_id):
-    proxies_data = load_user_proxies()
-    return proxies_data.get(str(user_id), [])
-
-def add_user_proxy(user_id, proxy):
-    proxies_data = load_user_proxies()
-    uid = str(user_id)
-    if uid not in proxies_data:
-        proxies_data[uid] = []
-    if proxy not in proxies_data[uid]:
-        proxies_data[uid].append(proxy)
-        save_user_proxies(proxies_data)
-        return True
-    return False
-
-def remove_user_proxy(user_id, proxy):
-    proxies_data = load_user_proxies()
-    uid = str(user_id)
-    if uid in proxies_data and proxy in proxies_data[uid]:
-        proxies_data[uid].remove(proxy)
-        save_user_proxies(proxies_data)
-        return True
-    return False
-
-def clear_user_proxies(user_id):
-    proxies_data = load_user_proxies()
-    uid = str(user_id)
-    if uid in proxies_data and proxies_data[uid]:
-        proxies_data[uid] = []
-        save_user_proxies(proxies_data)
-        return True
-    return False
-
-# ========== HIT STATS SYSTEM ==========
+# ========== HIT STATS ==========
 def load_hit_stats():
     if not os.path.exists(HIT_STATS_FILE):
         return {}
@@ -458,115 +328,72 @@ def load_hit_stats():
         return {}
 
 def save_hit_stats(data):
-    try:
-        with open(HIT_STATS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=4)
-    except:
-        pass
+    with open(HIT_STATS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=4)
 
 def record_hit(user_id, hit_type):
     data = load_hit_stats()
     uid = str(user_id)
     if uid not in data:
-        data[uid] = {'charged': 0, 'approved': 0, 'dead': 0, 'total': 0}
+        data[uid] = {"charged": 0, "approved": 0, "dead": 0, "total": 0}
     data[uid][hit_type] = data[uid].get(hit_type, 0) + 1
-    data[uid]['total'] = data[uid].get('total', 0) + 1
+    data[uid]["total"] = data[uid].get("total", 0) + 1
     save_hit_stats(data)
 
-def record_dead(user_id):
-    data = load_hit_stats()
-    uid = str(user_id)
-    if uid not in data:
-        data[uid] = {'charged': 0, 'approved': 0, 'dead': 0, 'total': 0}
-    data[uid]['dead'] = data[uid].get('dead', 0) + 1
-    data[uid]['total'] = data[uid].get('total', 0) + 1
-    save_hit_stats(data)
-
-# ========== RATE LIMIT HELPER ==========
-def check_rate_limit(user_id):
-    now = time.time()
-    last = _rate_limit_cache.get(user_id, 0)
-    diff = now - last
-    if diff < RATE_LIMIT_SECONDS:
-        return False, round(RATE_LIMIT_SECONDS - diff, 1)
-    _rate_limit_cache[user_id] = now
-    return True, 0
-
-# ========== REFERRAL SYSTEM ==========
-def load_referrals():
-    if not os.path.exists(REFERRAL_FILE):
+# ========== USER PROXIES ==========
+def load_user_proxies():
+    if not os.path.exists(USER_PROXIES_FILE):
         return {}
     try:
-        with open(REFERRAL_FILE, 'r', encoding='utf-8') as f:
+        with open(USER_PROXIES_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
     except:
         return {}
 
-def save_referrals(data):
-    try:
-        with open(REFERRAL_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=4)
-    except:
-        pass
+def save_user_proxies(data):
+    with open(USER_PROXIES_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=4)
 
-def get_referral_code(user_id):
-    data = load_referrals()
+def get_user_specific_proxies(user_id):
+    data = load_user_proxies()
     uid = str(user_id)
-    if uid not in data:
-        code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
-        data[uid] = {'code': code, 'referred': [], 'total_earned': 0}
-        save_referrals(data)
-    return data[uid]['code']
+    return data.get(uid, [])
 
-def process_referral(new_user_id, ref_code):
-    data = load_referrals()
-    new_uid = str(new_user_id)
-    for uid, info in data.items():
-        if new_uid in info.get('referred', []):
-            return False, None
-    for uid, info in data.items():
-        if info.get('code') == ref_code and uid != new_uid:
-            info['referred'].append(new_uid)
-            info['total_earned'] = info.get('total_earned', 0) + REFERRAL_REWARD
-            save_referrals(data)
-            add_credits(int(uid), REFERRAL_REWARD)
-            return True, int(uid)
-    return False, None
+# ========== RATE LIMIT ==========
+def check_rate_limit(user_id):
+    now = time.time()
+    if user_id in _rate_limit_cache:
+        if now - _rate_limit_cache[user_id] < RATE_LIMIT_SECONDS:
+            return False
+    _rate_limit_cache[user_id] = now
+    return True
 
-# ========== CREDITS LOW WARNING ==========
+# ========== CREDITS LOW CHECK ==========
 async def check_credits_low(user_id):
     credits = get_user_credits(user_id)
     if 0 < credits < CREDITS_LOW_THRESHOLD:
         try:
             await bot.send_message(user_id,
                 f"⚠️ <b>Low Credits Warning!</b>\n\n"
-                f"💰 You only have <b>{credits} credits</b> remaining.\n"
-                f"Use /redeemcredit KEY to add more credits.\n"
-                f"Contact @BUBU to purchase credits."
-            , parse_mode='html')
+                f"💰 Your balance: <code>{credits}</code>\n"
+                f"📋 Get more credits: /redeemcredit\n"
+                f"💎 Upgrade: /plans",
+                parse_mode='html')
         except:
             pass
 
-# ========== SITES & PROXIES HELPERS ==========
+# ========== SITES MANAGEMENT ==========
 def load_sites():
-    global ACTIVE_FILTER
     all_sites = get_file_lines(SITES_FILE)
-    if not all_sites:
-        return []
-    if ACTIVE_FILTER == "all":
-        return all_sites
     return all_sites
-
-def load_proxies():
-    return get_file_lines(PROXY_FILE)
 
 def add_site(site_url):
     sites = load_sites()
     if site_url in sites:
-        return False, "Site already exists"
+        return False
     with open(SITES_FILE, 'a', encoding='utf-8') as f:
         f.write(f"{site_url}\n")
-    return True, "Site added successfully"
+    return True
 
 def add_sites_bulk(site_urls):
     current_sites = load_sites()
@@ -586,56 +413,52 @@ def add_sites_bulk(site_urls):
 def remove_site(site_url):
     sites = load_sites()
     if site_url not in sites:
-        return False, "Site not found"
+        return False
     new_sites = [s for s in sites if s != site_url]
     with open(SITES_FILE, 'w', encoding='utf-8') as f:
         for site in new_sites:
             f.write(f"{site}\n")
-    return True, "Site removed successfully"
+    return True
 
-# ========== SEND REAL-TIME HIT NOTIFICATION TO USER ==========
+def load_proxies():
+    return get_file_lines(PROXY_FILE)
+
+# ========== SEND REALTIME HIT TO USER ==========
 async def send_realtime_hit_to_user(user_id, hit_type, card, response_msg, gateway, price):
     if hit_type == "CHARGED":
-        status_emoji = "⚡"
-        status_text = "CHARGED"
+        emoji = "⚡"
+        header = "CHARGED HIT"
+    elif hit_type == "APPROVED":
+        emoji = "💀"
+        header = "APPROVED HIT"
     else:
-        status_emoji = "💀"
-        status_text = "LIVE"
-    
-    bin_num = card.split('|')[0][:6]
-    brand, bin_type, level, bank, country, flag = await get_bin_info(bin_num)
-    
-    message = f"""<b>💀💳 #SHOPIFY HIT 💳💀</b>
+        return
+
+    msg = f"""{emoji} <b>{header}!</b>
 <b>─────────────────────</b>
-<b>⚡ HIT FOUND!</b>
-<blockquote>{status_emoji} Status: {status_text}</blockquote>
-<blockquote>💳 Card: <code>{card}</code></blockquote>
-<blockquote>📝 Response: {response_msg[:150]}</blockquote>
-<blockquote>🌐 Gateway: 🔥 {gateway} | 💰 {price}</blockquote>
-<b>─────────────────────</b>
-<b>📊 BIN INFO</b>
-<pre>🏦 Brand: {brand} - {bin_type} - {level}
-🏛️ Bank: {bank}
-🌍 Country: {country} {flag}</pre>
+<b>Card ➡</b> <code>{card}</code>
+<b>Response ➡</b> {response_msg[:100]}
+<b>Gateway ➡</b> {gateway}
+<b>Price ➡</b> {price}
 <b>─────────────────────</b>
 🤖 <b>Bot By: <a href="tg://user?id=7415233736">BUBU</a></b>"""
-    
+
     try:
-        await bot.send_message(user_id, message, parse_mode='html')
+        await bot.send_message(user_id, msg, parse_mode='html')
     except Exception as e:
         print(f"Error sending hit to user: {e}")
 
 # ========== PVT CHANNEL LOGS (ONLY CHARGED HITS) ==========
 async def send_log_to_channel(response_msg, gateway, price, username, user_id, card):
     header = "⚡ CHARGED HIT"
-    
+
     if username:
         user_display = username
     else:
         user_display = str(user_id)
-    
+
     plan_name = get_user_plan_name(user_id)
-    
+
     log_message = f"""<b>{header}</b>
 <b>─────────────────────</b>
 <b>Response ➡</b> {response_msg[:100]}
@@ -644,7 +467,7 @@ async def send_log_to_channel(response_msg, gateway, price, username, user_id, c
 <b>Card ➡</b> <code>{card}</code>
 <b>─────────────────────</b>
 <b>User ➡</b> <a href="tg://user?id={user_id}">{user_display}</a> ({plan_name} USER)"""
-    
+
     try:
         await bot.send_message(PVT_CHANNEL_ID, log_message, parse_mode='html')
     except Exception as e:
@@ -685,7 +508,7 @@ _DEAD_INDICATORS = (
     'gateway timeout', 'network error', 'connection reset',
     'failed to detect product', 'failed to create checkout',
     'failed to tokenize card', 'failed to get proposal data',
-    'submit rejected', 'submit rejected:','handle error', 'http 404',
+    'submit rejected', 'submit rejected:', 'handle error', 'http 404',
     'delivery_delivery_line_detail_changed', 'delivery_address2_required',
     'url rejected', 'malformed input', 'amount_too_small', 'amount too small',
     'site dead', 'captcha_required', 'captcha required', 'site errors', 'failed',
@@ -705,9 +528,12 @@ def extract_cc(text):
 
 def is_dead_site_error(error_msg):
     if not error_msg:
-        return True
-    error_lower = str(error_msg).lower()
-    return any(keyword in error_lower for keyword in _DEAD_INDICATORS)
+        return False
+    msg_lower = error_msg.lower()
+    for indicator in _DEAD_INDICATORS:
+        if indicator in msg_lower:
+            return True
+    return False
 
 async def check_card(card, site, proxy):
     try:
@@ -769,822 +595,598 @@ async def check_card_with_retry(card, sites, proxies, max_retries=2):
 
         if not result.get('retry'):
             return result
-
         last_result = result
-        if attempt < max_retries - 1:
-            await asyncio.sleep(0.3)
 
-    if last_result:
-        return {'status': 'Dead', 'message': f"Site errors: {last_result['message']}", 'card': card, 'gateway': last_result.get('gateway', 'Unknown'), 'price': last_result.get('price', '-'), 'site': 'Multiple'}
+    return last_result if last_result else {'status': 'Dead', 'message': 'All retries failed', 'card': card, 'gateway': 'Unknown', 'price': '-'}
 
-    return {'status': 'Dead', 'message': 'Max retries exceeded', 'card': card, 'gateway': 'Unknown', 'price': '-'}
-
-# ========== UPDATE PROGRESS ==========
-async def update_progress(user_id, message_id, results, current_attempt_count):
-    elapsed = int(time.time() - results['start_time'])
-    hours = elapsed // 3600
-    minutes = (elapsed % 3600) // 60
-    seconds = elapsed % 60
-
-    gateway = results['charged'][0]['gateway'] if results['charged'] else (results['approved'][0]['gateway'] if results['approved'] else 'Unknown')
-    
-    remaining_credits = get_user_credits(user_id)
-
-    progress_text = f"""<b>💀💳 Dark Checker Progress 💳💀</b>
-<b>─────────────────────</b>
-<b>⚡ PROGRESS</b>
-<blockquote>💳 Total: {results['total']} | ⚡ Charged: {len(results['charged'])} | 💀 Live: {len(results['approved'])} | ⬛ Dead: {len(results['dead'])}</blockquote>
-<blockquote>📊 Checked: {current_attempt_count}/{results['total']}</blockquote>
-<blockquote>🌐 Gateway: 🔥 {gateway}</blockquote>
-<blockquote>⏱️ Time: {hours}h {minutes}m {seconds}s</blockquote>
-<blockquote>💰 Credits Left: {remaining_credits}</blockquote>
-<b>─────────────────────</b>"""
-    
-    buttons = [
-        [Button.inline("⏸️ Pause", b"pause"), Button.inline("▶️ Resume", b"resume")],
-        [Button.inline("⏹️ Stop", b"stop")]
-    ]
-
-    try:
-        await bot.edit_message(user_id, message_id, progress_text, buttons=buttons, parse_mode='html')
-    except:
-        pass
-
-# ========== SEND FINAL RESULTS ==========
-async def send_final_results(user_id, results):
-    elapsed = int(time.time() - results['start_time'])
-    hours = elapsed // 3600
-    minutes = (elapsed % 3600) // 60
-    seconds = elapsed % 60
-
-    hits_text = ""
-    if results['charged']:
-        for r in results['charged'][:5]:
-            hits_text += f"⚡ <code>{r['card']}</code>\n"
-    if results['approved']:
-        for r in results['approved'][:5]:
-            hits_text += f"💀 <code>{r['card']}</code>\n"
-
-    if not hits_text:
-        hits_text = "No hits found"
-
-    gateway = results['charged'][0]['gateway'] if results['charged'] else (results['approved'][0]['gateway'] if results['approved'] else 'Unknown')
-    
-    remaining_credits = get_user_credits(user_id)
-
-    summary = f"""<b>💀💳 Dark Checker Results 💳💀</b>
-<b>─────────────────────</b>
-<b>📊 RESULTS</b>
-<blockquote>💳 Total: {results['total']} | ⚡ Charged: {len(results['charged'])} | 💀 Live: {len(results['approved'])} | ⬛ Dead: {len(results['dead'])}</blockquote>
-<blockquote>🌐 Gateway: 🔥 {gateway}</blockquote>
-<blockquote>⏱️ Time: {hours}h {minutes}m {seconds}s</blockquote>
-<blockquote>💰 Credits Left: {remaining_credits}</blockquote>
-<b>─────────────────────</b>
-<b>🎯 HITS</b>
-<blockquote>{hits_text}</blockquote>
-<b>─────────────────────</b>
-🤖 <b>Bot By: <a href="tg://user?id=7415233736">BUBU</a></b>"""
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"dark_checker_{user_id}_{timestamp}.txt"
-
-    async with aiofiles.open(filename, 'w') as f:
-        await f.write("=" * 70 + "\n")
-        await f.write("💀💳 DARK CHECKER RESULTS 💳💀\n")
-        await f.write("Format: CC | Gateway | Price | Message | Site\n")
-        await f.write("=" * 70 + "\n\n")
-
-        await f.write(f"⚡ CHARGED ({len(results['charged'])}):\n")
-        await f.write("-" * 70 + "\n")
-        for r in results['charged']:
-            await f.write(f"{r['card']} | {r.get('gateway', 'Unknown')} | {r.get('price', '-')} | {r['message'][:100]} | {r.get('site', 'Unknown')}\n")
-        await f.write("\n")
-
-        await f.write(f"💀 LIVE ({len(results['approved'])}):\n")
-        await f.write("-" * 70 + "\n")
-        for r in results['approved']:
-            await f.write(f"{r['card']} | {r.get('gateway', 'Unknown')} | {r.get('price', '-')} | {r['message'][:100]} | {r.get('site', 'Unknown')}\n")
-        await f.write("\n")
-
-        await f.write(f"⬛ DEAD ({len(results['dead'])}):\n")
-        await f.write("-" * 70 + "\n")
-        for r in results['dead']:
-            await f.write(f"{r['card']} | {r.get('gateway', 'Unknown')} | {r.get('price', '-')} | {r['message'][:100]} | {r.get('site', 'Unknown')}\n")
-
-    await bot.send_message(user_id, summary, file=filename, parse_mode='html')
-
-    try:
-        os.remove(filename)
-    except:
-        pass
-# ========== SITE & PROXY TESTING ==========
+# ========== TEST FUNCTIONS ==========
 async def test_site(site, proxy):
-    test_card = "5154623245618097|03|2032|156"
+    test_card = "4000000000000000|12|2026|123"
     try:
         params = {'cc': test_card, 'site': site, 'proxy': proxy}
-        timeout = aiohttp.ClientTimeout(total=60)
+        timeout = aiohttp.ClientTimeout(total=15)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(CHECKER_API_URL, params=params) as resp:
                 raw = await resp.json(content_type=None)
         response_msg = raw.get('Response', '').lower()
         if is_dead_site_error(response_msg):
-            return {'site': site, 'status': 'dead'}
-        return {'site': site, 'status': 'alive'}
+            return {'status': 'dead', 'site': site}
+        return {'status': 'alive', 'site': site}
     except:
-        return {'site': site, 'status': 'dead'}
+        return {'status': 'dead', 'site': site}
 
 async def test_proxy(proxy):
-    test_card = "5154623245618097|03|2032|156"
-    test_site_url = "https://riverbendhomedev.myshopify.com"
+    test_card = "4000000000000000|12|2026|123"
+    test_site_url = "https://example.com"
     try:
         params = {'cc': test_card, 'site': test_site_url, 'proxy': proxy}
-        timeout = aiohttp.ClientTimeout(total=60)
+        timeout = aiohttp.ClientTimeout(total=15)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(CHECKER_API_URL, params=params) as resp:
                 raw = await resp.json(content_type=None)
         response_msg = raw.get('Response', '').lower()
-        if 'proxy dead' in response_msg or 'invalid proxy format' in response_msg or 'no proxy' in response_msg:
-            return {'proxy': proxy, 'status': 'dead'}
-        else:
-            return {'proxy': proxy, 'status': 'alive'}
+        if 'could not resolve' in response_msg or 'connection failed' in response_msg:
+            return {'status': 'dead', 'proxy': proxy}
+        return {'status': 'alive', 'proxy': proxy}
     except:
-        return {'proxy': proxy, 'status': 'dead'}
+        return {'status': 'dead', 'proxy': proxy}
 
-# ========== BOT COMMANDS ==========
-joined_users = set()
+# ========== GROUP SETTINGS ==========
+def load_group_settings():
+    if not os.path.exists(GROUP_SETTINGS_FILE):
+        return {}
+    try:
+        with open(GROUP_SETTINGS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except:
+        return {}
 
-def set_user_joined(user_id):
-    joined_users.add(user_id)
+def save_group_settings(settings):
+    with open(GROUP_SETTINGS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(settings, f, indent=4)
+# ========== COMMANDS ==========
 
 @bot.on(events.NewMessage(pattern=r'^/start(@\w+)?(\s+.*)?$'))
 async def start(event):
     user_id = event.sender_id
     if is_banned(user_id):
         return await event.reply("🚫 <b>You are banned from using this bot.</b>", parse_mode='html')
-    
-    joined, missing_chats = await check_user_joined(user_id)
+
+    args = event.message.text.split()
+    if len(args) > 1:
+        ref_code = args[1]
+        if ref_code.isdigit():
+            ref_id = int(ref_code)
+            if ref_id != user_id:
+                referrals = load_referrals()
+                uid = str(user_id)
+                if uid not in referrals:
+                    info = load_referrals()
+                    if uid not in info:
+                        info[uid] = {'referred_by': ref_id, 'referred_at': datetime.now().isoformat(), 'total_earned': 0}
+                    info[uid]['referred_by'] = ref_id
+                    info[uid]['total_earned'] = info[uid].get('total_earned', 0) + REFERRAL_REWARD
+                    save_referrals(info)
+                    add_credits(int(uid), REFERRAL_REWARD)
+                    try:
+                        await bot.send_message(ref_id,
+                            f"🎉 <b>New Referral!</b>\n\n"
+                            f"👤 User <code>{user_id}</code> joined!\n"
+                            f"💰 You earned <b>{REFERRAL_REWARD}</b> credits!",
+                            parse_mode='html')
+                    except:
+                        pass
+
+    joined, missing = await check_user_joined(user_id)
     if not joined:
-        buttons = []
-        for link in missing_chats:
-            buttons.append([Button.url("📢 Join Channel", link)])
-        buttons.append([Button.inline("✅ Joined", b"check_joined")])
-        missing_text = "\n".join([f"🔗 <a href='{link}'>Click here to join</a>" for link in missing_chats])
-        return await event.reply(f"<b>⚠️ Access Denied!</b>\n\nYou must join the following channels first:\n\n{missing_text}\n\nThen click 'Joined' button.", buttons=buttons, parse_mode='html')
-    
-    set_user_joined(user_id)
-    is_prem = is_premium(user_id)
-    is_adm = is_admin(user_id)
+        buttons = [[Button.inline("✅ Check Joined", b"check_joined")]]
+        missing_text = "\n".join([f"➡️ {link}" for link in missing[:5]])
+        return await event.reply(
+            f"⚠️ <b>Please join our channels:</b>\n\n"
+            f"{missing_text}\n\n"
+            f"Tap below after joining:",
+            buttons=buttons,
+            parse_mode='html'
+        )
+
     credits = get_user_credits(user_id)
     plan_name = get_user_plan_name(user_id)
-    
-    text = f"""<b>💀💳 Welcome to Dark Checker 💳💀</b>
+
+    welcome_text = f"""<b>🤖 DARK CHECKER BOT</b>
 <b>─────────────────────</b>
-<b>⚙️ CC COMMANDS</b>
-<blockquote>➡️ /cc card|mm|yy|cvv - Check single CC (1 credit)
-➡️ /chk - Reply to .txt file to check cards (1 credit per card)
-➡️ /multi card1|mm|yy|cvv ... - Check multiple cards
-➡️ /mcc card|mm|yy|cvv - Check 1 card against ALL sites</blockquote>
+<b>👤 User:</b> <code>{user_id}</code>
+<b>📋 Plan:</b> {plan_name}
+<b>💰 Credits:</b> {credits}
+<b>─────────────────────</b>
+<b>Available Commands:</b>
+➡️ /cc - Check single card
+➡️ /chk - Check cards from .txt
+➡️ /multi - Multi-card check
+➡️ /mcc - Mass card check
+➡️ /info - Card BIN info
+➡️ /plans - Premium plans
+➡️ /redeem - Redeem premium key
+➡️ /redeemcredit - Redeem credit key
+➡️ /myhistory - Your hit history
+➡️ /topusers - Top hit users
+➡️ /refer - Get referral link
+➡️ /transfercredits - Send credits
+➡️ /ping - Check bot status
+<b>─────────────────────</b>
+<b>📢 Updates:</b> @dududadadee
+🤖 <b>Bot By: <a href="tg://user?id=7415233736">BUBU</a></b>"""
 
-<b>⚙️ SITE COMMANDS</b>
-<blockquote>➡️ /site - Check all sites & remove dead
-➡️ /addsite site.com - Add single site
-➡️ /addsitetxt - Add sites from .txt file (bulk)
-➡️ /rm url - Remove a specific site
-➡️ /clearsite - Clear all sites (with backup)
-➡️ /getsites - Get all sites file</blockquote>
-
-<b>⚙️ PROXY COMMANDS</b>
-<blockquote>➡️ /proxy - Check all proxies & remove dead
-➡️ /addproxy - Add proxies (one per line)
-➡️ /addproxytxt - Add proxies from .txt file (bulk)
-➡️ /chkproxy proxy - Check single proxy
-➡️ /rmproxy proxy - Remove single proxy
-➡️ /rmproxyindex 1,2,3 - Remove by index
-➡️ /clearproxy - Remove all proxies
-➡️ /getproxy - Get all proxies
-➡️ /setproxy proxy - Set your personal proxy
-➡️ /myproxy - View your personal proxies
-➡️ /delmyproxy proxy - Delete a personal proxy
-➡️ /clearmyproxy - Clear all your personal proxies</blockquote>
-
-<b>⚙️ PREMIUM & KEYS</b>
-<blockquote>➡️ /redeem KEY - Redeem premium key
-➡️ /redeemcredit KEY - Redeem credit key
-➡️ /plans - Check premium plans
-➡️ /info - Your account details & credits
-➡️ /myhistory - Your hit statistics
-➡️ /transfercredits user_id amount - Transfer credits
-➡️ /ping - Check bot response time
-➡️ /refer - Get your referral code & earn credits
-➡️ /topusers - Top 10 hit leaderboard</blockquote>"""
-    
-    if is_prem:
-        premium_data = load_premium_users().get(str(user_id), {})
-        expiry = premium_data.get('expiry', 'Unknown')
-        if expiry != 'Unknown':
-            expiry_dt = datetime.fromisoformat(expiry)
-            expiry_str = expiry_dt.strftime('%Y-%m-%d')
-        else:
-            expiry_str = 'Unknown'
-        text += f"\n\n<b>💎 Premium Access Active!</b>\n<b>📋 Plan:</b> {plan_name}\n<b>💰 Credits Available:</b> {credits}\n<b>📅 Expires:</b> {expiry_str}"
-    else:
-        text += f"\n\n<b>⚠️ Premium required for /cc and /chk commands</b>\n<b>💰 Credits Available:</b> {credits}"
-    
-    if is_adm:
-        text += """\n<b>🔑 ADMIN COMMANDS</b>
-<blockquote>➡️ /filter - Set site price filter
-➡️ /addpremium user_id plan_name - Add premium with plan
-➡️ /addpremiumcustom user_id days credits - Add custom premium
-➡️ /removepremium user - Remove premium
-➡️ /addcredits user amount - Add credits to user
-➡️ /removecredits user amount - Remove credits from user
-➡️ /genpremiumkey amount plan - Generate premium keys
-➡️ /gencreditkey amount credits - Generate credit-only keys
-➡️ /ban user - Ban user
-➡️ /unban user - Unban user
-➡️ /stats - Bot statistics
-➡️ /allstats - Full stats with hit history
-➡️ /userlist - List all premium users
-➡️ /checkcredits user_id - Check user credits
-➡️ /setcredits user_id amount - Set exact credits
-➡️ /exportstats - Export full hit stats file
-➡️ /activecheck - See who is checking now
-➡️ /broadcast msg - Broadcast message to ALL users
-➡️ /groupmode on/off - Enable/disable bot in current group</blockquote>"""
-    
-    text += f"\n\n<b>─────────────────────</b>\n🤖 <b>Bot By: <a href=\"tg://user?id=7415233736\">BUBU</a></b>"
-    
-    await event.reply(text, parse_mode='html')
+    await event.reply(welcome_text, parse_mode='html')
 
 @bot.on(events.CallbackQuery(pattern=b"check_joined"))
 async def check_joined_callback(event):
     user_id = event.sender_id
-    joined, _ = await check_user_joined(user_id)
+    joined, missing = await check_user_joined(user_id)
+
     if joined:
-        set_user_joined(user_id)
-        await event.edit("✅ <b>Verification successful!</b>\n\nUse /start again to access the bot.", parse_mode='html')
+        await event.answer("✅ You're in! Use /start again.", alert=True)
+        await event.delete()
     else:
-        await event.answer("❌ You haven't joined all channels yet! Please join first.", alert=True)
+        missing_text = "\n".join([f"➡️ {link}" for link in missing[:5]])
+        await event.answer(f"❌ Still not joined:\n{missing_text}", alert=True)
 
 @bot.on(events.NewMessage(pattern=r'^/info(@\w+)?(\s+.*)?$'))
-async def info_command(event):
+async def info(event):
     user_id = event.sender_id
     if is_banned(user_id):
         return await event.reply("🚫 You are banned!", parse_mode='html')
-    
-    credits = get_user_credits(user_id)
-    is_prem = is_premium(user_id)
-    plan_name = get_user_plan_name(user_id)
-    
-    if is_prem:
-        premium_data = load_premium_users().get(str(user_id), {})
-        expiry = premium_data.get('expiry', 'Unknown')
-        days_added = premium_data.get('days', 0)
-        added_at = premium_data.get('added_at', 'Unknown')
-        if expiry != 'Unknown':
-            expiry_dt = datetime.fromisoformat(expiry)
-            expiry_str = expiry_dt.strftime('%Y-%m-%d %H:%M:%S')
-            days_left = (expiry_dt - datetime.now()).days
-        else:
-            expiry_str = 'Unknown'
-            days_left = 0
-        
-        text = f"""<b>💎 YOUR ACCOUNT INFO 💎</b>
+
+    args = event.message.text.split()
+    if len(args) < 2:
+        return await event.reply("❌ Usage: <code>/info 4000001234560000</code>", parse_mode='html')
+
+    bin_num = args[1][:6]
+    brand, bin_type, level, bank, country, flag = await get_bin_info(bin_num)
+
+    text = f"""<b>💳 BIN INFO</b>
 <b>─────────────────────</b>
-
-<b>👤 User ID:</b> <code>{user_id}</code>
-<b>⭐ Status:</b> <b>PREMIUM</b>
-<b>📋 Plan:</b> {plan_name}
-<b>💰 Credits:</b> {credits}
-<b>📅 Premium Expires:</b> {expiry_str}
-<b>⏱️ Days Left:</b> {days_left} days
-<b>📆 Plan Duration:</b> {days_added} days
-<b>🕐 Activated:</b> {added_at}
-
+<b>BIN:</b> <code>{bin_num}</code>
+<b>Brand:</b> {brand}
+<b>Type:</b> {bin_type}
+<b>Level:</b> {level}
+<b>Bank:</b> {bank}
+<b>Country:</b> {country} {flag}
 <b>─────────────────────</b>
-💡 Use /plans to see available plans
-💡 Contact @BUBU to recharge
+🤖 <b>Bot By: <a href="tg://user?id=7415233736">BUBU</a></b>"""
 
-🤖 <b>Bot By: <a href=\"tg://user?id=7415233736\">BUBU</a></b>"""
-    else:
-        text = f"""<b>⚠️ YOUR ACCOUNT INFO ⚠️</b>
-<b>─────────────────────</b>
-
-<b>👤 User ID:</b> <code>{user_id}</code>
-<b>⭐ Status:</b> FREE USER
-<b>📋 Plan:</b> FREE
-<b>💰 Credits:</b> {credits}
-
-<b>─────────────────────</b>
-💎 Premium Required to use /cc and /chk
-💡 Use /plans to see premium plans
-💡 Use /redeem to activate premium key
-💡 Use /redeemcredit to activate credit key
-
-🤖 <b>Bot By: <a href=\"tg://user?id=7415233736\">BUBU</a></b>"""
-    
     await event.reply(text, parse_mode='html')
 
 @bot.on(events.NewMessage(pattern=r'^/plans(@\w+)?(\s+.*)?$'))
-async def plans_command(event):
-    text = """<b>💎 DARK PREMIUM PLANS 💎</b>
-<b>─────────────────────</b>
+async def plans(event):
+    user_id = event.sender_id
+    if is_banned(user_id):
+        return await event.reply("🚫 You are banned!", parse_mode='html')
 
-<b>⭐ TRIAL</b>
-➡️ 1 Day Access
-➡️ 3,000 Credits
-➡️ Price: 2$
-<b>─────────────────────</b>
+    text = "<b>💎 PREMIUM PLANS</b>\n<b>─────────────────────</b>\n\n"
+    for key, plan in PLANS.items():
+        text += f"<b>{plan['name']}</b>\n"
+        text += f"📅 {plan['days']} days | 💰 {plan['credits']} credits | 💵 {plan['price']}\n\n"
 
-<b>🥉 BRONZE</b>
-➡️ 3 Days Access
-➡️ 8,000 Credits
-➡️ Price: 4$
-<b>─────────────────────</b>
+    text += "<b>─────────────────────</b>\n"
+    text += "📋 <b>To purchase:</b> Contact Admin\n"
+    text += "🔐 <b>Redeem key:</b> /redeem\n"
+    text += "💰 <b>Redeem credits:</b> /redeemcredit\n"
+    text += "<b>─────────────────────</b>\n"
+    text += "🤖 <b>Bot By: <a href=\"tg://user?id=7415233736\">BUBU</a></b>"
 
-<b>🥈 SILVER</b>
-➡️ 7 Days Access
-➡️ 14,000 Credits
-➡️ Price: 8$
-<b>─────────────────────</b>
-
-<b>🥇 GOLD</b>
-➡️ 14 Days Access
-➡️ 20,000 Credits
-➡️ Price: 12$
-<b>─────────────────────</b>
-
-<b>💎 PLATINUM</b>
-➡️ 24 Days Access
-➡️ 30,000 Credits
-➡️ Price: 22$
-<b>─────────────────────</b>
-
-<b>💀 How to Purchase?</b>
-Contact: <a href="tg://user?id=7415233736">BUBU</a>
-
-<b>─────────────────────</b>
-🤖 <b>Bot By: <a href="tg://user?id=7415233736">BUBU</a></b>"""
     await event.reply(text, parse_mode='html')
 
 @bot.on(events.NewMessage(pattern=r'^/redeem(@\w+)?(\s+.*)?$'))
-async def redeem_premium_key_command(event):
+async def redeem(event):
     user_id = event.sender_id
     if is_banned(user_id):
         return await event.reply("🚫 You are banned!", parse_mode='html')
-    
+
     args = event.message.text.split()
     if len(args) != 2:
-        return await event.reply("❌ Usage: <code>/redeem PREMIUM_KEY</code>", parse_mode='html')
-    
-    key = args[1].strip().upper()
-    success, msg = redeem_premium_key(key, user_id)
-    
-    if success:
-        credits = get_user_credits(user_id)
-        await event.reply(f"✅ <b>{msg}</b>\n\n💰 Your Credits: {credits}", parse_mode='html')
-    else:
-        await event.reply(f"❌ <b>{msg}</b>", parse_mode='html')
+        return await event.reply("❌ Usage: <code>/redeem KEY</code>", parse_mode='html')
+
+    key = args[1].strip()
+    keys_data = load_keys()
+    if key not in keys_data:
+        return await event.reply("❌ Invalid or expired key!", parse_mode='html')
+
+    key_info = keys_data[key]
+    plan_key = key_info.get('plan', 'trial')
+    days = key_info.get('days', 1)
+    credits = key_info.get('credits', 0)
+
+    add_premium_user(user_id, plan_key, days, credits)
+    del keys_data[key]
+    save_keys(keys_data)
+
+    plan_name = PLANS.get(plan_key, {}).get('name', 'FREE')
+    await event.reply(
+        f"✅ <b>Key Redeemed!</b>\n\n"
+        f"📋 Plan: {plan_name}\n"
+        f"📅 Duration: {days} days\n"
+        f"💰 Credits: {credits}",
+        parse_mode='html')
 
 @bot.on(events.NewMessage(pattern=r'^/redeemcredit(@\w+)?(\s+.*)?$'))
-async def redeem_credit_key_command(event):
+async def redeemcredit(event):
     user_id = event.sender_id
     if is_banned(user_id):
         return await event.reply("🚫 You are banned!", parse_mode='html')
-    
+
     args = event.message.text.split()
     if len(args) != 2:
-        return await event.reply("❌ Usage: <code>/redeemcredit CREDIT_KEY</code>", parse_mode='html')
-    
-    key = args[1].strip().upper()
-    success, credits = redeem_credit_key(key, user_id)
-    
-    if success:
-        total_credits = get_user_credits(user_id)
-        await event.reply(f"✅ <b>Credit Key Redeemed!</b>\n\n💰 Added: {credits} credits\n💳 Total Credits: {total_credits}", parse_mode='html')
-    else:
-        await event.reply(f"❌ <b>{credits}</b>", parse_mode='html')
+        return await event.reply("❌ Usage: <code>/redeemcredit KEY</code>", parse_mode='html')
+
+    key = args[1].strip()
+    credit_keys = load_credit_keys()
+    if key not in credit_keys:
+        return await event.reply("❌ Invalid or expired credit key!", parse_mode='html')
+
+    credit_amount = credit_keys[key].get('credits', 0)
+    add_credits(user_id, credit_amount)
+    del credit_keys[key]
+    save_credit_keys(credit_keys)
+
+    await event.reply(f"✅ <b>Credit Key Redeemed!</b>\n\n💰 Credits added: {credit_amount}", parse_mode='html')
 
 @bot.on(events.NewMessage(pattern=r'^/addpremium(@\w+)?(\s+.*)?$'))
-async def add_premium_admin(event):
+async def addpremium(event):
     user_id = event.sender_id
     if not is_admin(user_id):
         return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
+
     args = event.message.text.split()
-    if len(args) != 3:
-        await event.reply("❌ Usage: <code>/addpremium user_id plan_name</code>\n\n<u>Available Plans:</u>\n➡️ trial\n➡️ bronze\n➡️ silver\n➡️ gold\n➡️ platinum\n\nExample: <code>/addpremium 7415233736 platinum</code>", parse_mode='html')
-        return
-    
+    if len(args) < 3:
+        return await event.reply("❌ Usage: <code>/addpremium user_id plan</code>", parse_mode='html')
+
     try:
         target_id = int(args[1])
         plan_key = args[2].lower()
-        
+
         if plan_key not in PLANS:
             await event.reply(f"❌ Invalid plan! Available: trial, bronze, silver, gold, platinum", parse_mode='html')
             return
-        
+
         plan_info = PLANS[plan_key]
         days = plan_info['days']
         credits = plan_info['credits']
-        
+
         add_premium_user(target_id, plan_key, days, credits)
-        
+
         await event.reply(f"✅ <b>Premium added!</b>\n\n👤 User: <code>{target_id}</code>\n📋 Plan: {plan_info['name']}\n📅 Days: {days}\n💰 Credits: {credits}", parse_mode='html')
-        
-        try:
-            expiry = datetime.now() + timedelta(days=days)
-            await bot.send_message(target_id, f"🎉 <b>Premium Access Granted!</b>\n\n📋 Plan: {plan_info['name']}\n📅 You now have {days} days of premium access with {credits} credits!\n📆 Expires: {expiry.strftime('%Y-%m-%d')}\n\nUse /info to check your account.", parse_mode='html')
-        except:
-            pass
-            
-    except ValueError:
+
+    except:
         await event.reply("❌ Invalid user_id!", parse_mode='html')
 
 @bot.on(events.NewMessage(pattern=r'^/addpremiumcustom(@\w+)?(\s+.*)?$'))
-async def add_premium_custom_admin(event):
+async def addpremiumcustom(event):
     user_id = event.sender_id
     if not is_admin(user_id):
         return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
+
     args = event.message.text.split()
-    if len(args) != 4:
-        await event.reply("❌ Usage: <code>/addpremiumcustom user_id days credits</code>\n\nExample: <code>/addpremiumcustom 7415233736 15 5000</code>", parse_mode='html')
-        return
-    
+    if len(args) < 4:
+        return await event.reply("❌ Usage: <code>/addpremiumcustom user_id plan days credits</code>", parse_mode='html')
+
     try:
         target_id = int(args[1])
-        days = int(args[2])
-        credits = int(args[3])
-        
-        if days <= 0 or credits <= 0:
-            await event.reply("❌ Days and credits must be positive!", parse_mode='html')
+        plan_key = args[2].lower()
+        days = int(args[3])
+        credits = int(args[4]) if len(args) > 4 else 0
+
+        if plan_key not in PLANS:
+            await event.reply(f"❌ Invalid plan! Available: trial, bronze, silver, gold, platinum", parse_mode='html')
             return
-        
-        add_premium_user(target_id, "custom", days, credits)
-        
-        await event.reply(f"✅ <b>Custom Premium added!</b>\n\n👤 User: <code>{target_id}</code>\n📅 Days: {days}\n💰 Credits: {credits}", parse_mode='html')
-        
-        try:
-            expiry = datetime.now() + timedelta(days=days)
-            await bot.send_message(target_id, f"🎉 <b>Premium Access Granted!</b>\n\n📅 You now have {days} days of premium access with {credits} credits!\n📆 Expires: {expiry.strftime('%Y-%m-%d')}\n\nUse /info to check your account.", parse_mode='html')
-        except:
-            pass
-            
-    except ValueError:
-        await event.reply("❌ Invalid user_id, days, or credits!", parse_mode='html')
+
+        add_premium_user(target_id, plan_key, days, credits)
+        plan_name = PLANS[plan_key]['name']
+
+        await event.reply(f"✅ <b>Custom Premium added!</b>\n\n👤 User: <code>{target_id}</code>\n📋 Plan: {plan_name}\n📅 Days: {days}\n💰 Credits: {credits}", parse_mode='html')
+
+    except:
+        await event.reply("❌ Invalid arguments!", parse_mode='html')
 
 @bot.on(events.NewMessage(pattern=r'^/removepremium(@\w+)?(\s+.*)?$'))
-async def remove_premium_admin(event):
+async def removepremium(event):
     user_id = event.sender_id
     if not is_admin(user_id):
         return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
+
     args = event.message.text.split()
     if len(args) != 2:
         return await event.reply("❌ Usage: <code>/removepremium user_id</code>", parse_mode='html')
-    
+
     try:
         target_id = int(args[1])
+        premium_data = load_premium_users()
+        uid = str(target_id)
+        if uid in premium_data:
+            del premium_data[uid]
+            save_premium_users(premium_data)
+            await event.reply(f"✅ <b>Premium removed!</b>\n\n👤 User: <code>{target_id}</code>", parse_mode='html')
+        else:
+            await event.reply("❌ User is not premium!", parse_mode='html')
     except:
-        return await event.reply("❌ Invalid user_id", parse_mode='html')
-    
-    premium_data = load_premium_users()
-    if str(target_id) in premium_data:
-        del premium_data[str(target_id)]
-        save_premium_users(premium_data)
-        await event.reply(f"✅ <b>Premium removed!</b>\n\nUser: <code>{target_id}</code>", parse_mode='html')
-        try:
-            await bot.send_message(target_id, f"⚠️ <b>Premium Access Removed!</b>\n\nYour premium access has been revoked.", parse_mode='html')
-        except:
-            pass
-    else:
-        await event.reply(f"❌ User <code>{target_id}</code> does not have premium", parse_mode='html')
+        await event.reply("❌ Invalid user_id!", parse_mode='html')
 
 @bot.on(events.NewMessage(pattern=r'^/addcredits(@\w+)?(\s+.*)?$'))
-async def add_credits_admin(event):
+async def addcredits_command(event):
     user_id = event.sender_id
     if not is_admin(user_id):
         return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
+
     args = event.message.text.split()
-    if len(args) != 3:
+    if len(args) < 3:
         return await event.reply("❌ Usage: <code>/addcredits user_id amount</code>", parse_mode='html')
-    
+
     try:
         target_id = int(args[1])
         amount = int(args[2])
+        add_credits(target_id, amount)
+        new_balance = get_user_credits(target_id)
+        await event.reply(f"✅ <b>Credits Added!</b>\n\n👤 User: <code>{target_id}</code>\n💰 Added: {amount}\n💰 New Balance: {new_balance}", parse_mode='html')
     except:
-        return await event.reply("❌ Invalid user_id or amount", parse_mode='html')
-    
-    add_credits(target_id, amount)
-    new_total = get_user_credits(target_id)
-    await event.reply(f"✅ <b>Credits Added!</b>\n\nUser: <code>{target_id}</code>\nAdded: {amount}\nNew Total: {new_total}", parse_mode='html')
-    
-    try:
-        await bot.send_message(target_id, f"💰 <b>{amount} Credits Added!</b>\n\nYour new balance: {new_total} credits", parse_mode='html')
-    except:
-        pass
+        await event.reply("❌ Invalid user_id or amount!", parse_mode='html')
 
 @bot.on(events.NewMessage(pattern=r'^/removecredits(@\w+)?(\s+.*)?$'))
-async def remove_credits_admin(event):
+async def removecredits_command(event):
     user_id = event.sender_id
     if not is_admin(user_id):
         return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
+
     args = event.message.text.split()
-    if len(args) != 3:
+    if len(args) < 3:
         return await event.reply("❌ Usage: <code>/removecredits user_id amount</code>", parse_mode='html')
-    
+
     try:
         target_id = int(args[1])
         amount = int(args[2])
+        remove_credits(target_id, amount)
+        new_balance = get_user_credits(target_id)
+        await event.reply(f"✅ <b>Credits Removed!</b>\n\n👤 User: <code>{target_id}</code>\n💰 Removed: {amount}\n💰 New Balance: {new_balance}", parse_mode='html')
     except:
-        return await event.reply("❌ Invalid user_id or amount", parse_mode='html')
-    
-    remove_credits(target_id, amount)
-    new_total = get_user_credits(target_id)
-    await event.reply(f"✅ <b>Credits Removed!</b>\n\nUser: <code>{target_id}</code>\nRemoved: {amount}\nNew Total: {new_total}", parse_mode='html')
-    
-    try:
-        await bot.send_message(target_id, f"⚠️ <b>{amount} Credits Removed!</b>\n\nYour new balance: {new_total} credits", parse_mode='html')
-    except:
-        pass
+        await event.reply("❌ Invalid user_id or amount!", parse_mode='html')
 
 @bot.on(events.NewMessage(pattern=r'^/ban(@\w+)?(\s+.*)?$'))
-async def ban_user_admin(event):
+async def ban_command(event):
     user_id = event.sender_id
     if not is_admin(user_id):
         return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
+
     args = event.message.text.split()
     if len(args) != 2:
         return await event.reply("❌ Usage: <code>/ban user_id</code>", parse_mode='html')
-    
+
     try:
         target_id = int(args[1])
+        ban_user(target_id)
+        await event.reply(f"🚫 <b>User Banned!</b>\n\n👤 User: <code>{target_id}</code>", parse_mode='html')
     except:
-        return await event.reply("❌ Invalid user_id", parse_mode='html')
-    
-    ban_user(target_id)
-    await event.reply(f"✅ <b>User banned!</b>\n\nUser: <code>{target_id}</code>", parse_mode='html')
-    
-    try:
-        await bot.send_message(target_id, f"🚫 <b>You have been banned!</b>\n\nYou can no longer use this bot.", parse_mode='html')
-    except:
-        pass
+        await event.reply("❌ Invalid user_id!", parse_mode='html')
 
 @bot.on(events.NewMessage(pattern=r'^/unban(@\w+)?(\s+.*)?$'))
-async def unban_user_admin(event):
+async def unban_command(event):
     user_id = event.sender_id
     if not is_admin(user_id):
         return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
+
     args = event.message.text.split()
     if len(args) != 2:
         return await event.reply("❌ Usage: <code>/unban user_id</code>", parse_mode='html')
-    
+
     try:
         target_id = int(args[1])
+        unban_user(target_id)
+        await event.reply(f"✅ <b>User Unbanned!</b>\n\n👤 User: <code>{target_id}</code>", parse_mode='html')
     except:
-        return await event.reply("❌ Invalid user_id", parse_mode='html')
-    
-    unban_user(target_id)
-    await event.reply(f"✅ <b>User unbanned!</b>\n\nUser: <code>{target_id}</code>", parse_mode='html')
-    
-    try:
-        await bot.send_message(target_id, f"✅ <b>You have been unbanned!</b>\n\nYou can now use the bot again.", parse_mode='html')
-    except:
-        pass
+        await event.reply("❌ Invalid user_id!", parse_mode='html')
 
 @bot.on(events.NewMessage(pattern=r'^/genpremiumkey(@\w+)?(\s+.*)?$'))
-async def gen_premium_key_admin(event):
+async def genpremiumkey(event):
     user_id = event.sender_id
     if not is_admin(user_id):
         return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
-    args = event.message.text.split()
-    
-    if len(args) == 3:
-        try:
-            amount = int(args[1])
-            plan_key = args[2].lower()
-            if plan_key not in PLANS:
-                return await event.reply(f"❌ Invalid plan! Available: {', '.join(PLANS.keys())}, custom", parse_mode='html')
-        except:
-            return await event.reply("❌ Usage: <code>/genpremiumkey amount plan</code>\n\nExample: <code>/genpremiumkey 5 gold</code>", parse_mode='html')
-        
-        keys_generated = []
-        days = PLANS[plan_key]['days']
-        credits = PLANS[plan_key]['credits']
-        for i in range(amount):
-            key = generate_premium_key(plan_key, days, credits)
-            keys_generated.append(key)
-        
-        plan = PLANS[plan_key]
-        keys_text = "\n".join([f"➡️ <code>{k}</code>" for k in keys_generated])
-        msg = f"""✅ <b>Premium Keys Generated Successfully!</b>
 
-<b>📊 Summary:</b>
-➡️ Quantity: {amount}
-➡️ Plan: {plan['name']}
-➡️ Days: {plan['days']}
-➡️ Credits: {plan['credits']}
-➡️ Price: {plan['price']} each
-
-<b>🔑 Generated Keys:</b>
-{keys_text}
-
-<b>⚠️ Note:</b> Share these keys with users. They can redeem using <code>/redeem KEY</code>"""
-        await event.reply(msg, parse_mode='html')
-    
-    elif len(args) == 5 and args[2].lower() == "custom":
-        try:
-            amount = int(args[1])
-            days = int(args[3])
-            credits = int(args[4])
-            if amount <= 0 or days <= 0 or credits <= 0:
-                raise ValueError
-            if amount > 50:
-                return await event.reply("❌ Maximum 50 keys at once!", parse_mode='html')
-        except:
-            return await event.reply("❌ Usage: <code>/genpremiumkey amount custom days credits</code>\n\nExample: <code>/genpremiumkey 5 custom 15 5000</code>", parse_mode='html')
-        
-        keys_generated = []
-        for i in range(amount):
-            key = generate_premium_key("custom", days, credits)
-            keys_generated.append(key)
-        
-        keys_text = "\n".join([f"➡️ <code>{k}</code>" for k in keys_generated])
-        msg = f"""✅ <b>Custom Premium Keys Generated Successfully!</b>
-
-<b>📊 Summary:</b>
-➡️ Quantity: {amount}
-➡️ Days: {days} per key
-➡️ Credits: {credits} per key
-
-<b>🔑 Generated Keys:</b>
-{keys_text}
-
-<b>⚠️ Note:</b> Share these keys with users. They can redeem using <code>/redeem KEY</code>"""
-        await event.reply(msg, parse_mode='html')
-    
-    else:
-        await event.reply("❌ Usage:\n<code>/genpremiumkey amount plan</code>\nExample: <code>/genpremiumkey 5 gold</code>\n\nOR\n\n<code>/genpremiumkey amount custom days credits</code>\nExample: <code>/genpremiumkey 5 custom 15 5000</code>", parse_mode='html')
-
-@bot.on(events.NewMessage(pattern=r'^/gencreditkey(@\w+)?(\s+.*)?$'))
-async def gen_credit_key_admin(event):
-    user_id = event.sender_id
-    if not is_admin(user_id):
-        return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
-    args = event.message.text.split()
-    
-    if len(args) == 3:
-        try:
-            amount = int(args[1])
-            credits = int(args[2])
-            if amount <= 0 or credits <= 0:
-                raise ValueError
-            if amount > 50:
-                return await event.reply("❌ Maximum 50 keys at once!", parse_mode='html')
-        except:
-            return await event.reply("❌ Usage: <code>/gencreditkey amount credits</code>\n\nExample: <code>/gencreditkey 5 5000</code>", parse_mode='html')
-        
-        keys_generated = []
-        for i in range(amount):
-            key = generate_credit_key(credits)
-            keys_generated.append(key)
-        
-        keys_text = "\n".join([f"➡️ <code>{k}</code>" for k in keys_generated])
-        msg = f"""✅ <b>Credit Keys Generated Successfully!</b>
-
-<b>📊 Summary:</b>
-➡️ Quantity: {amount}
-➡️ Credits: {credits} per key
-
-<b>🔑 Generated Keys:</b>
-{keys_text}
-
-<b>⚠️ Note:</b> Share these keys with users. They can redeem using <code>/redeemcredit KEY</code> to get {credits} credits only (no premium)!"""
-        await event.reply(msg, parse_mode='html')
-    
-    else:
-        await event.reply("❌ Usage: <code>/gencreditkey amount credits</code>\nExample: <code>/gencreditkey 5 5000</code>", parse_mode='html')
-
-@bot.on(events.NewMessage(pattern=r'^/stats(@\w+)?(\s+.*)?$'))
-async def stats_admin(event):
-    user_id = event.sender_id
-    if not is_admin(user_id):
-        return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
-    global ACTIVE_FILTER
-    premium_data = load_premium_users()
-    keys_data = load_keys()
-    credit_keys_data = load_credit_keys()
-    credits_data = load_credits()
-    sites = load_sites()
-    proxies = load_proxies()
-    banned = load_banned_users()
-    
-    total_premium = len(premium_data)
-    total_keys = len(keys_data)
-    used_premium_keys = sum(1 for k in keys_data.values() if k.get('used', False))
-    total_credit_keys = len(credit_keys_data)
-    used_credit_keys = sum(1 for k in credit_keys_data.values() if k.get('used', False))
-    total_sites = len(sites)
-    total_proxies = len(proxies)
-    total_banned = len(banned)
-    total_credits = sum(credits_data.values())
-    
-    msg = f"<b>📊 Bot Statistics</b>\n\n"
-    msg += f"<b>👥 Users:</b>\n"
-    msg += f"➡️ Premium Users: {total_premium}\n"
-    msg += f"➡️ Banned Users: {total_banned}\n\n"
-    msg += f"<b>💰 Credits:</b>\n"
-    msg += f"➡️ Total Credits Active: {total_credits}\n\n"
-    msg += f"<b>🔑 Premium Keys:</b>\n"
-    msg += f"➡️ Total Generated: {total_keys}\n"
-    msg += f"➡️ Used: {used_premium_keys}\n"
-    msg += f"➡️ Unused: {total_keys - used_premium_keys}\n\n"
-    msg += f"<b>💎 Credit Keys:</b>\n"
-    msg += f"➡️ Total Generated: {total_credit_keys}\n"
-    msg += f"➡️ Used: {used_credit_keys}\n"
-    msg += f"➡️ Unused: {total_credit_keys - used_credit_keys}\n\n"
-    msg += f"<b>🌐 Data:</b>\n"
-    msg += f"➡️ Sites: {total_sites}\n"
-    msg += f"➡️ Proxies: {total_proxies}\n\n"
-    msg += f"<b>🎯 Active Filter:</b> {SITE_FILTERS[ACTIVE_FILTER]['name']}\n\n"
-    msg += f"🤖 <b>Bot By: <a href=\"tg://user?id=7415233736\">BUBU</a></b>"
-    
-    await event.reply(msg, parse_mode='html')
-
-@bot.on(events.NewMessage(pattern=r'^/broadcast(@\w+)?(\s+.*)?$'))
-async def broadcast_admin(event):
-    user_id = event.sender_id
-    if not is_admin(user_id):
-        return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
-    broadcast_msg = event.message.text.replace('/broadcast', '', 1).strip()
-    if not broadcast_msg:
-        return await event.reply("❌ Usage: <code>/broadcast message</code>", parse_mode='html')
-    
-    premium_users = load_premium_users()
-    credits_users = load_credits()
-    
-    all_user_ids = set()
-    
-    for uid_str in premium_users.keys():
-        all_user_ids.add(int(uid_str))
-    
-    for uid_str in credits_users.keys():
-        all_user_ids.add(int(uid_str))
-    
-    for uid in joined_users:
-        all_user_ids.add(uid)
-    
-    for aid in ADMIN_IDS:
-        all_user_ids.add(aid)
-    
-    sent = 0
-    failed = 0
-    
-    status_msg = await event.reply(f"🔄 Broadcasting to {len(all_user_ids)} users...", parse_mode='html')
-    
-    for uid in all_user_ids:
-        try:
-            await bot.send_message(uid, f"📢 <b>Broadcast from Admin</b>\n\n{broadcast_msg}", parse_mode='html')
-            sent += 1
-        except:
-            failed += 1
-        await asyncio.sleep(0.1)
-    
-    await status_msg.edit(f"✅ <b>Broadcast Complete!</b>\n\nSent: {sent}\nFailed: {failed}", parse_mode='html')
-
-@bot.on(events.NewMessage(pattern=r'^/groupmode(@\w+)?(\s+.*)?$'))
-async def groupmode_command(event):
-    user_id = event.sender_id
-    if not is_admin(user_id):
-        return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
-    if not event.is_group:
-        return await event.reply("❌ <b>This command only works in groups!</b>", parse_mode='html')
-    
     args = event.message.text.split()
     if len(args) < 2:
-        return await event.reply("❌ Usage: <code>/groupmode on/off</code>", parse_mode='html')
-    
-    action = args[1].lower()
-    chat_id = event.chat_id
-    
-    if action == 'on':
-        set_group_enabled(chat_id, True)
-        await event.reply("✅ <b>Bot enabled in this group!</b>\n\nUsers can now use /cc for free checking.", parse_mode='html')
-    elif action == 'off':
-        set_group_enabled(chat_id, False)
-        await event.reply("✅ <b>Bot disabled in this group!</b>", parse_mode='html')
+        return await event.reply("❌ Usage: <code>/genpremiumkey plan [quantity]</code>", parse_mode='html')
+
+    plan_key = args[1].lower()
+    quantity = 1
+    if len(args) >= 3:
+        try:
+            quantity = min(int(args[2]), 100)
+        except:
+            pass
+
+    if plan_key not in PLANS:
+        await event.reply(f"❌ Invalid plan! Available: trial, bronze, silver, gold, platinum", parse_mode='html')
+        return
+
+    plan_info = PLANS[plan_key]
+    keys_data = load_keys()
+    new_keys = []
+
+    for _ in range(quantity):
+        key = 'BUBU-' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=4)) + '-' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=4)) + '-' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
+        keys_data[key] = {
+            'plan': plan_key,
+            'days': plan_info['days'],
+            'credits': plan_info['credits'],
+            'created': datetime.now().isoformat()
+        }
+        new_keys.append(key)
+
+    save_keys(keys_data)
+
+    if quantity == 1:
+        await event.reply(
+            f"🔐 <b>Premium Key Generated!</b>\n\n"
+            f"<code>{new_keys[0]}</code>\n\n"
+            f"📋 Plan: {plan_info['name']}\n"
+            f"📅 Days: {plan_info['days']}\n"
+            f"💰 Credits: {plan_info['credits']}",
+            parse_mode='html')
     else:
-        await event.reply("❌ Usage: <code>/groupmode on/off</code>", parse_mode='html')
+        keys_text = "\n".join([f"<code>{k}</code>" for k in new_keys])
+        await event.reply(
+            f"🔐 <b>{quantity} Premium Keys Generated!</b>\n\n"
+            f"{keys_text}\n\n"
+            f"📋 Plan: {plan_info['name']}\n"
+            f"📅 Days: {plan_info['days']}\n"
+            f"💰 Credits: {plan_info['credits']}",
+            parse_mode='html')
+
+@bot.on(events.NewMessage(pattern=r'^/gencreditkey(@\w+)?(\s+.*)?$'))
+async def gencreditkey(event):
+    user_id = event.sender_id
+    if not is_admin(user_id):
+        return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
+
+    args = event.message.text.split()
+    if len(args) < 2:
+        return await event.reply("❌ Usage: <code>/gencreditkey credits [quantity]</code>", parse_mode='html')
+
+    try:
+        credits = int(args[1])
+    except:
+        return await event.reply("❌ Invalid credits amount!", parse_mode='html')
+
+    quantity = 1
+    if len(args) >= 3:
+        try:
+            quantity = min(int(args[2]), 100)
+        except:
+            pass
+
+    credit_keys = load_credit_keys()
+    new_keys = []
+
+    for _ in range(quantity):
+        key = 'CRED-' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=4)) + '-' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
+        credit_keys[key] = {
+            'credits': credits,
+            'created': datetime.now().isoformat()
+        }
+        new_keys.append(key)
+
+    save_credit_keys(credit_keys)
+
+    if quantity == 1:
+        await event.reply(
+            f"💰 <b>Credit Key Generated!</b>\n\n"
+            f"<code>{new_keys[0]}</code>\n\n"
+            f"💰 Credits: {credits}",
+            parse_mode='html')
+    else:
+        keys_text = "\n".join([f"<code>{k}</code>" for k in new_keys])
+        await event.reply(
+            f"💰 <b>{quantity} Credit Keys Generated!</b>\n\n"
+            f"{keys_text}\n\n"
+            f"💰 Credits per key: {credits}",
+            parse_mode='html')
+
+@bot.on(events.NewMessage(pattern=r'^/stats(@\w+)?(\s+.*)?$'))
+async def stats(event):
+    user_id = event.sender_id
+    if is_banned(user_id):
+        return await event.reply("🚫 You are banned!", parse_mode='html')
+
+    hit_data = load_hit_stats()
+    uid = str(user_id)
+    user_stats = hit_data.get(uid, {"charged": 0, "approved": 0, "dead": 0, "total": 0})
+
+    total_users = len(hit_data)
+    total_charged = sum(s.get('charged', 0) for s in hit_data.values())
+    total_approved = sum(s.get('approved', 0) for s in hit_data.values())
+    total_dead = sum(s.get('dead', 0) for s in hit_data.values())
+    total_all = sum(s.get('total', 0) for s in hit_data.values())
+
+    credits = get_user_credits(user_id)
+    plan_name = get_user_plan_name(user_id)
+
+    text = f"""<b>📊 STATISTICS</b>
+<b>─────────────────────</b>
+<b>👤 Your Stats:</b>
+<b>⚡ Charged:</b> {user_stats.get('charged', 0)}
+<b>💀 Approved:</b> {user_stats.get('approved', 0)}
+<b>⬛ Dead:</b> {user_stats.get('dead', 0)}
+<b>📊 Total:</b> {user_stats.get('total', 0)}
+<b>─────────────────────</b>
+<b>🌐 Global Stats:</b>
+<b>👥 Total Users:</b> {total_users}
+<b>⚡ Total Charged:</b> {total_charged}
+<b>💀 Total Approved:</b> {total_approved}
+<b>⬛ Total Dead:</b> {total_dead}
+<b>📊 Total Checks:</b> {total_all}
+<b>─────────────────────</b>
+<b>📋 Plan:</b> {plan_name}
+<b>💰 Credits:</b> {credits}
+<b>─────────────────────</b>
+🤖 <b>Bot By: <a href="tg://user?id=7415233736">BUBU</a></b>"""
+
+    await event.reply(text, parse_mode='html')
+
+@bot.on(events.NewMessage(pattern=r'^/broadcast(@\w+)?(\s+.*)?$'))
+async def broadcast(event):
+    user_id = event.sender_id
+    if not is_admin(user_id):
+        return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
+
+    if not event.reply_to_msg_id:
+        return await event.reply("❌ Reply to a message to broadcast!", parse_mode='html')
+
+    replied = await event.get_reply_message()
+    premium_data = load_premium_users()
+    credits_data = load_credits()
+
+    all_users = set()
+    all_users.update(premium_data.keys())
+    all_users.update(credits_data.keys())
+
+    all_users.discard(str(user_id))
+
+    success = 0
+    failed = 0
+    status_msg = await event.reply(f"📢 Broadcasting to {len(all_users)} users...", parse_mode='html')
+
+    for uid in all_users:
+        try:
+            await bot.send_message(int(uid), replied)
+            success += 1
+        except:
+            failed += 1
+        await asyncio.sleep(0.5)
+
+    await status_msg.edit(
+        f"✅ <b>Broadcast Complete!</b>\n\n"
+        f"✅ Sent: {success}\n"
+        f"❌ Failed: {failed}",
+        parse_mode='html')
+
+@bot.on(events.NewMessage(pattern=r'^/groupmode(@\w+)?(\s+.*)?$'))
+async def groupmode(event):
+    user_id = event.sender_id
+    if not is_admin(user_id):
+        return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
+
+    args = event.message.text.split()
+    if len(args) != 2:
+        return await event.reply("❌ Usage: <code>/groupmode on|off</code>", parse_mode='html')
+
+    mode = args[1].lower()
+    settings = load_group_settings()
+    if mode == 'on':
+        settings['group_enabled'] = True
+        save_group_settings(settings)
+        await event.reply("✅ <b>Group Mode: ON</b>", parse_mode='html')
+    elif mode == 'off':
+        settings['group_enabled'] = False
+        save_group_settings(settings)
+        await event.reply("✅ <b>Group Mode: OFF</b>", parse_mode='html')
+    else:
+        await event.reply("❌ Usage: <code>/groupmode on|off</code>", parse_mode='html')
 
 @bot.on(events.NewMessage(pattern=r'^/filter(@\w+)?(\s+.*)?$'))
 async def filter_command(event):
@@ -1592,18 +1194,18 @@ async def filter_command(event):
     user_id = event.sender_id
     if not is_admin(user_id):
         return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
+
     args = event.message.text.split()
     if len(args) != 2:
         filters_text = "\n".join([f"➡️ <code>/{key}</code> - {val['name']}" for key, val in SITE_FILTERS.items()])
         await event.reply(f"<b>🎯 Site Price Filters</b>\n\n{filters_text}\n\n<b>Current Filter:</b> {SITE_FILTERS[ACTIVE_FILTER]['name']}\n\n<b>Usage:</b> <code>/filter under10</code>", parse_mode='html')
         return
-    
+
     filter_key = args[1].lower()
     if filter_key not in SITE_FILTERS:
         await event.reply(f"❌ Invalid filter. Use: {', '.join(SITE_FILTERS.keys())}", parse_mode='html')
         return
-    
+
     ACTIVE_FILTER = filter_key
     await event.reply(f"✅ <b>Filter Updated!</b>\n\nNow using: {SITE_FILTERS[ACTIVE_FILTER]['name']}", parse_mode='html')
 
@@ -1614,47 +1216,46 @@ async def site_command(event):
         return await event.reply("🚫 You are banned!", parse_mode='html')
     if not is_admin(user_id):
         return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
+
     sites = load_sites()
     if not sites:
         return await event.reply("❌ `sites.txt` is empty. Nothing to check.", parse_mode='html')
-    
+
     proxies = load_proxies()
     if not proxies:
         return await event.reply("❌ No proxies available. Please add proxies.", parse_mode='html')
-    
+
     status_msg = await event.reply(f"🔄 Checking {len(sites)} sites...", parse_mode='html')
-    
+
     alive_sites = []
     dead_sites = []
     batch_size = 10
-    
+
     try:
         for i in range(0, len(sites), batch_size):
             batch = sites[i:i + batch_size]
             fresh_proxies = load_proxies()
             if not fresh_proxies:
                 fresh_proxies = proxies
-            
-            tasks = [test_site(site, random.choice(fresh_proxies)) for site in batch]
+            tasks = [test_site(s, random.choice(fresh_proxies)) for s in batch]
             results = await asyncio.gather(*tasks)
-            
+
             for res in results:
                 if res['status'] == 'alive':
                     alive_sites.append(res['site'])
                 else:
                     dead_sites.append(res['site'])
-            
+
             await status_msg.edit(f"🔄 Checking sites...\n\n<b>Checked:</b> {len(alive_sites) + len(dead_sites)}/{len(sites)}\n<b>Alive:</b> {len(alive_sites)}\n<b>Dead:</b> {len(dead_sites)}", parse_mode='html')
-        
+
         async with aiofiles.open(SITES_FILE, 'w') as f:
             for site in alive_sites:
                 await f.write(f"{site}\n")
-        
+
         summary_msg = f"✅ <b>Site Check Complete!</b>\n\n<b>Total Sites:</b> {len(sites)}\n<b>Alive:</b> {len(alive_sites)}\n<b>Removed:</b> {len(dead_sites)}\n\n<code>sites.txt</code> has been updated."
-        
+
         await status_msg.edit(summary_msg, parse_mode='html')
-        
+
     except Exception as e:
         await status_msg.edit(f"❌ An error occurred: {e}", parse_mode='html')
 
@@ -1663,20 +1264,21 @@ async def get_sites_command(event):
     user_id = event.sender_id
     if is_banned(user_id):
         return await event.reply("🚫 You are banned!", parse_mode='html')
-    
+
     if not os.path.exists(SITES_FILE):
         return await event.reply("❌ `sites.txt` file not found.", parse_mode='html')
-    
+
     sites = get_file_lines(SITES_FILE)
     if not sites:
         return await event.reply("❌ `sites.txt` is empty.", parse_mode='html')
-    
+
     total = len(sites)
     await event.reply(
         f"📄 <b>Sites File</b>\n\n📊 Total Sites: {total}\n\n✅ Sending <code>sites.txt</code> file...",
         file=SITES_FILE,
         parse_mode='html'
     )
+
 @bot.on(events.NewMessage(pattern=r'^/addsite(@\w+)?(\s+)?'))
 async def addsite_command(event):
     user_id = event.sender_id
@@ -1684,18 +1286,17 @@ async def addsite_command(event):
         return await event.reply("🚫 You are banned!", parse_mode='html')
     if not is_admin(user_id):
         return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
-    args = event.message.text.split(maxsplit=1)
-    if len(args) < 2:
-        return await event.reply("❌ Usage: <code>/addsite https://example.myshopify.com</code>", parse_mode='html')
-    
-    site_url = args[1].strip()
-    success, msg = add_site(site_url)
-    
-    if success:
-        await event.reply(f"✅ {msg}\n\n🌐 <code>{site_url}</code>", parse_mode='html')
-    else:
-        await event.reply(f"❌ {msg}", parse_mode='html')
+
+    full_text = event.message.text
+    lines = full_text.strip().split('\n')
+
+    if len(lines) < 2:
+        return await event.reply("❌ Usage:\n<code>/addsite</code>\n<code>site_url</code>\n<code>site_url</code>\n\nAdd one site per line after the command.", parse_mode='html')
+
+    site_lines = [s.strip() for s in lines[1:] if s.strip()]
+    added, already = add_sites_bulk(site_lines)
+
+    await event.reply(f"✅ <b>Sites Added!</b>\n\n➕ New: {len(added)}\n⏭️ Already existed: {len(already)}", parse_mode='html')
 
 @bot.on(events.NewMessage(pattern=r'^/addsitetxt(@\w+)?(\s+)?'))
 async def addsitetxt_command(event):
@@ -1704,29 +1305,29 @@ async def addsitetxt_command(event):
         return await event.reply("🚫 You are banned!", parse_mode='html')
     if not is_admin(user_id):
         return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
+
     if not event.reply_to_msg_id:
         return await event.reply("❌ Reply to a <code>.txt</code> file with <code>/addsitetxt</code>", parse_mode='html')
-    
+
     replied = await event.get_reply_message()
     if not replied.file:
         return await event.reply("❌ No file found. Reply to a .txt file!", parse_mode='html')
-    
+
     if not replied.file.name.endswith('.txt'):
         return await event.reply("❌ Only .txt files supported!", parse_mode='html')
-    
+
     status_msg = await event.reply("⏳ Downloading file...", parse_mode='html')
-    
+
     file_path = f"sites_bulk_{user_id}.txt"
     await bot.download_media(replied, file_path)
-    
+
     with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
         lines = [line.strip() for line in f if line.strip()]
-    
+
     os.remove(file_path)
-    
+
     added, already = add_sites_bulk(lines)
-    
+
     msg = f"✅ <b>Sites Added!</b>\n\n➕ New: {len(added)}\n⏭️ Already existed: {len(already)}"
     if added:
         msg += f"\n\n<b>Added:</b>\n"
@@ -1734,7 +1335,7 @@ async def addsitetxt_command(event):
             msg += f"🌐 {s}\n"
         if len(added) > 10:
             msg += f"and {len(added) - 10} more..."
-    
+
     await status_msg.edit(msg, parse_mode='html')
 
 @bot.on(events.NewMessage(pattern=r'^/rm(@\w+)?(\s+)?'))
@@ -1744,18 +1345,16 @@ async def rm_site_command(event):
         return await event.reply("🚫 You are banned!", parse_mode='html')
     if not is_admin(user_id):
         return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
-    args = event.message.text.split(maxsplit=1)
-    if len(args) < 2:
-        return await event.reply("❌ Usage: <code>/rm https://example.myshopify.com</code>", parse_mode='html')
-    
-    site_url = args[1].strip()
-    success, msg = remove_site(site_url)
-    
-    if success:
-        await event.reply(f"✅ {msg}\n\n🌐 Removed: <code>{site_url}</code>", parse_mode='html')
+
+    args = event.message.text.split('\n')
+    if len(args) < 2 or not args[1].strip():
+        return await event.reply("❌ Usage: <code>/rm site_url</code>", parse_mode='html')
+
+    site_to_remove = args[1].strip()
+    if remove_site(site_to_remove):
+        await event.reply(f"✅ <b>Site Removed!</b>\n\n🌐 {site_to_remove}", parse_mode='html')
     else:
-        await event.reply(f"❌ {msg}", parse_mode='html')
+        await event.reply(f"❌ Site not found: {site_to_remove}", parse_mode='html')
 
 @bot.on(events.NewMessage(pattern=r'^/clearsite(@\w+)?(?:\s|$)'))
 async def clear_site_command(event):
@@ -1764,24 +1363,19 @@ async def clear_site_command(event):
         return await event.reply("🚫 You are banned!", parse_mode='html')
     if not is_admin(user_id):
         return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
-    if not os.path.exists(SITES_FILE):
-        return await event.reply("❌ `sites.txt` is already empty.", parse_mode='html')
-    
-    sites = get_file_lines(SITES_FILE)
+
+    sites = load_sites()
     if not sites:
         return await event.reply("❌ `sites.txt` is already empty.", parse_mode='html')
-    
-    # Backup
-    backup_file = f"sites_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+
+    backup_file = f"sites_backup_{int(time.time())}.txt"
     with open(backup_file, 'w', encoding='utf-8') as f:
         for s in sites:
             f.write(f"{s}\n")
-    
-    # Clear
+
     with open(SITES_FILE, 'w', encoding='utf-8') as f:
         f.write('')
-    
+
     await event.reply(f"✅ <b>Sites Cleared!</b>\n\n🗑️ Removed: {len(sites)} sites\n💾 Backup saved: <code>{backup_file}</code>", parse_mode='html')
 
 @bot.on(events.NewMessage(pattern=r'^/proxy(@\w+)?(\s+)?'))
@@ -1791,39 +1385,39 @@ async def proxy_command(event):
         return await event.reply("🚫 You are banned!", parse_mode='html')
     if not is_admin(user_id):
         return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
+
     proxies = load_proxies()
     if not proxies:
         return await event.reply("❌ `proxy.txt` is empty. Nothing to check.", parse_mode='html')
-    
+
     status_msg = await event.reply(f"🔄 Checking {len(proxies)} proxies...", parse_mode='html')
-    
+
     alive_proxies = []
     dead_proxies = []
     batch_size = 10
-    
+
     try:
         for i in range(0, len(proxies), batch_size):
             batch = proxies[i:i + batch_size]
             tasks = [test_proxy(proxy) for proxy in batch]
             results = await asyncio.gather(*tasks)
-            
+
             for res in results:
                 if res['status'] == 'alive':
                     alive_proxies.append(res['proxy'])
                 else:
                     dead_proxies.append(res['proxy'])
-            
+
             await status_msg.edit(f"🔄 Checking proxies...\n\n<b>Checked:</b> {len(alive_proxies) + len(dead_proxies)}/{len(proxies)}\n<b>Alive:</b> {len(alive_proxies)}\n<b>Dead:</b> {len(dead_proxies)}", parse_mode='html')
-        
+
         async with aiofiles.open(PROXY_FILE, 'w') as f:
             for proxy in alive_proxies:
                 await f.write(f"{proxy}\n")
-        
+
         summary_msg = f"✅ <b>Proxy Check Complete!</b>\n\n<b>Total Proxies:</b> {len(proxies)}\n<b>Alive:</b> {len(alive_proxies)}\n<b>Removed:</b> {len(dead_proxies)}\n\n<code>proxy.txt</code> has been updated."
-        
+
         await status_msg.edit(summary_msg, parse_mode='html')
-        
+
     except Exception as e:
         await status_msg.edit(f"❌ An error occurred: {e}", parse_mode='html')
 
@@ -1834,21 +1428,19 @@ async def addproxy_command(event):
         return await event.reply("🚫 You are banned!", parse_mode='html')
     if not is_admin(user_id):
         return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
-    # Get text after command (skip first line which is /addproxy)
+
     full_text = event.message.text
     lines = full_text.strip().split('\n')
-    
+
     if len(lines) < 2:
         return await event.reply("❌ Usage:\n<code>/addproxy</code>\n<code>ip:port:user:pass</code>\n<code>ip:port:user:pass</code>\n\nAdd one proxy per line after the command.", parse_mode='html')
-    
-    # Skip first line (command), rest are proxies
+
     proxy_lines = [p.strip() for p in lines[1:] if p.strip()]
-    
+
     current_proxies = load_proxies()
     added = 0
     already = 0
-    
+
     for proxy in proxy_lines:
         if proxy not in current_proxies:
             async with aiofiles.open(PROXY_FILE, 'a') as f:
@@ -1857,7 +1449,7 @@ async def addproxy_command(event):
             added += 1
         else:
             already += 1
-    
+
     await event.reply(f"✅ <b>Proxies Added!</b>\n\n➕ New: {added}\n⏭️ Already existed: {already}", parse_mode='html')
 
 @bot.on(events.NewMessage(pattern=r'^/addproxytxt(@\w+)?(\s+)?'))
@@ -1867,31 +1459,31 @@ async def addproxytxt_command(event):
         return await event.reply("🚫 You are banned!", parse_mode='html')
     if not is_admin(user_id):
         return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
+
     if not event.reply_to_msg_id:
         return await event.reply("❌ Reply to a <code>.txt</code> file with <code>/addproxytxt</code>", parse_mode='html')
-    
+
     replied = await event.get_reply_message()
     if not replied.file:
         return await event.reply("❌ No file found. Reply to a .txt file!", parse_mode='html')
-    
+
     if not replied.file.name.endswith('.txt'):
         return await event.reply("❌ Only .txt files supported!", parse_mode='html')
-    
+
     status_msg = await event.reply("⏳ Downloading file...", parse_mode='html')
-    
-    file_path = f"proxies_bulk_{user_id}.txt"
+
+    file_path = f"proxy_bulk_{user_id}.txt"
     await bot.download_media(replied, file_path)
-    
+
     with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
         lines = [line.strip() for line in f if line.strip()]
-    
+
     os.remove(file_path)
-    
+
     current_proxies = load_proxies()
     added = 0
     already = 0
-    
+
     for proxy in lines:
         if proxy not in current_proxies:
             async with aiofiles.open(PROXY_FILE, 'a') as f:
@@ -1900,1079 +1492,901 @@ async def addproxytxt_command(event):
             added += 1
         else:
             already += 1
-    
-    await status_msg.edit(f"✅ <b>Proxies Added!</b>\n\n➕ New: {added}\n⏭️ Already existed: {already}", parse_mode='html')
 
-@bot.on(events.NewMessage(pattern=r'^/chkproxy(@\w+)?(\s+)?'))
-async def chkproxy_command(event):
-    user_id = event.sender_id
-    if is_banned(user_id):
-        return await event.reply("🚫 You are banned!", parse_mode='html')
-    
-    args = event.message.text.split(maxsplit=1)
-    if len(args) < 2:
-        return await event.reply("❌ Usage: <code>/chkproxy ip:port:user:pass</code>", parse_mode='html')
-    
-    proxy = args[1].strip()
-    status_msg = await event.reply(f"🔄 Checking proxy...", parse_mode='html')
-    
-    result = await test_proxy(proxy)
-    
-    if result['status'] == 'alive':
-        await status_msg.edit(f"✅ <b>Proxy is ALIVE!</b>\n\n🔌 <code>{proxy}</code>", parse_mode='html')
-    else:
-        await status_msg.edit(f"❌ <b>Proxy is DEAD!</b>\n\n🔌 <code>{proxy}</code>", parse_mode='html')
+        msg = f"✅ <b>Proxies Added!</b>\n\n➕ New: {added}\n⏭️ Already existed: {already}"
+        
 
-@bot.on(events.NewMessage(pattern=r'^/rmproxy(@\w+)?(\s+)?'))
-async def rmproxy_command(event):
-    user_id = event.sender_id
-    if is_banned(user_id):
-        return await event.reply("🚫 You are banned!", parse_mode='html')
-    if not is_admin(user_id):
-        return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
-    args = event.message.text.split(maxsplit=1)
-    if len(args) < 2:
-        return await event.reply("❌ Usage: <code>/rmproxy ip:port:user:pass</code>", parse_mode='html')
-    
-    proxy = args[1].strip()
-    proxies = load_proxies()
-    
-    if proxy not in proxies:
-        return await event.reply("❌ Proxy not found!", parse_mode='html')
-    
-    new_proxies = [p for p in proxies if p != proxy]
-    async with aiofiles.open(PROXY_FILE, 'w') as f:
-        for p in new_proxies:
-            await f.write(f"{p}\n")
-    
-    await event.reply(f"✅ <b>Proxy Removed!</b>\n\n🔌 <code>{proxy}</code>", parse_mode='html')
-
-@bot.on(events.NewMessage(pattern=r'^/rmproxyindex(@\w+)?(\s+)?'))
-async def rmproxyindex_command(event):
-    user_id = event.sender_id
-    if is_banned(user_id):
-        return await event.reply("🚫 You are banned!", parse_mode='html')
-    if not is_admin(user_id):
-        return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
-    args = event.message.text.split(maxsplit=1)
-    if len(args) < 2:
-        return await event.reply("❌ Usage: <code>/rmproxyindex 1,2,3</code>", parse_mode='html')
-    
-    indexes_str = args[1].strip()
-    try:
-        indexes = [int(i.strip()) - 1 for i in indexes_str.split(',') if i.strip().isdigit()]
-    except:
-        return await event.reply("❌ Invalid indexes! Use format: 1,2,3", parse_mode='html')
-    
-    proxies = load_proxies()
-    if not proxies:
-        return await event.reply("❌ No proxies available.", parse_mode='html')
-    
-    removed = []
-    new_proxies = []
-    for idx, proxy in enumerate(proxies):
-        if idx in indexes:
-            removed.append(proxy)
-        else:
-            new_proxies.append(proxy)
-    
-    if not removed:
-        return await event.reply("❌ No proxies found at those indexes.", parse_mode='html')
-    
-    async with aiofiles.open(PROXY_FILE, 'w') as f:
-        for p in new_proxies:
-            await f.write(f"{p}\n")
-    
-    msg = f"✅ <b>Proxies Removed!</b>\n\n🗑️ Removed {len(removed)} proxies:\n"
-    for r in removed[:10]:
-        msg += f"🔌 {r}\n"
-    
-    await event.reply(msg, parse_mode='html')
-
-@bot.on(events.NewMessage(pattern=r'^/clearproxy(@\w+)?(?:\s|$)'))
-async def clearproxy_command(event):
-    user_id = event.sender_id
-    if is_banned(user_id):
-        return await event.reply("🚫 You are banned!", parse_mode='html')
-    if not is_admin(user_id):
-        return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
-    proxies = load_proxies()
-    if not proxies:
-        return await event.reply("❌ `proxy.txt` is already empty.", parse_mode='html')
-    
-    total = len(proxies)
-    
-    # Backup
-    backup_file = f"proxy_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-    with open(backup_file, 'w', encoding='utf-8') as f:
-        for p in proxies:
-            f.write(f"{p}\n")
-    
-    # Clear
-    async with aiofiles.open(PROXY_FILE, 'w') as f:
-        await f.write('')
-    
-    await event.reply(f"✅ <b>Proxies Cleared!</b>\n\n🗑️ Removed: {total} proxies\n💾 Backup saved: <code>{backup_file}</code>", parse_mode='html')
-
-@bot.on(events.NewMessage(pattern=r'^/getproxy(@\w+)?(?:\s|$)'))
-async def getproxy_command(event):
-    user_id = event.sender_id
-    if is_banned(user_id):
-        return await event.reply("🚫 You are banned!", parse_mode='html')
-    
-    if not os.path.exists(PROXY_FILE):
-        return await event.reply("❌ `proxy.txt` file not found.", parse_mode='html')
-    
-    proxies = get_file_lines(PROXY_FILE)
-    if not proxies:
-        return await event.reply("❌ `proxy.txt` is empty.", parse_mode='html')
-    
-    total = len(proxies)
-    await event.reply(
-        f"📄 <b>Proxy File</b>\n\n📊 Total Proxies: {total}\n\n✅ Sending <code>proxy.txt</code> file...",
-        file=PROXY_FILE,
-        parse_mode='html'
-    )
-
-@bot.on(events.NewMessage(pattern=r'^/setproxy(@\w+)?(\s+)?'))
-async def setproxy_command(event):
-    user_id = event.sender_id
-    if is_banned(user_id):
-        return await event.reply("🚫 You are banned!", parse_mode='html')
-    
-    args = event.message.text.split(maxsplit=1)
-    if len(args) < 2:
-        return await event.reply("❌ Usage: <code>/setproxy ip:port:user:pass</code>", parse_mode='html')
-    
-    proxy = args[1].strip()
-    if add_user_proxy(user_id, proxy):
-        await event.reply(f"✅ <b>Personal Proxy Added!</b>\n\n🔌 <code>{proxy}</code>\n\nUse /myproxy to view your proxies.", parse_mode='html')
-    else:
-        await event.reply("❌ Proxy already exists in your list.", parse_mode='html')
-
-@bot.on(events.NewMessage(pattern=r'^/myproxy(@\w+)?(?:\s|$)'))
-async def myproxy_command(event):
-    user_id = event.sender_id
-    if is_banned(user_id):
-        return await event.reply("🚫 You are banned!", parse_mode='html')
-    
-    my_proxies = get_user_specific_proxies(user_id)
-    if not my_proxies:
-        return await event.reply("❌ You don't have any personal proxies.\n\nUse <code>/setproxy proxy</code> to add one.", parse_mode='html')
-    
-    msg = f"<b>🔌 Your Personal Proxies</b>\n<b>─────────────────────</b>\n\n"
-    for i, proxy in enumerate(my_proxies, 1):
-        msg += f"<blockquote>{i}. <code>{proxy}</code></blockquote>\n"
-    msg += f"\n<b>Total:</b> {len(my_proxies)}"
-    
-    await event.reply(msg, parse_mode='html')
-
-@bot.on(events.NewMessage(pattern=r'^/delmyproxy(@\w+)?(\s+)?'))
-async def delmyproxy_command(event):
-    user_id = event.sender_id
-    if is_banned(user_id):
-        return await event.reply("🚫 You are banned!", parse_mode='html')
-    
-    args = event.message.text.split(maxsplit=1)
-    if len(args) < 2:
-        return await event.reply("❌ Usage: <code>/delmyproxy ip:port:user:pass</code>", parse_mode='html')
-    
-    proxy = args[1].strip()
-    if remove_user_proxy(user_id, proxy):
-        await event.reply(f"✅ <b>Personal Proxy Removed!</b>\n\n🔌 <code>{proxy}</code>", parse_mode='html')
-    else:
-        await event.reply("❌ Proxy not found in your list.", parse_mode='html')
-
-@bot.on(events.NewMessage(pattern=r'^/clearmyproxy(@\w+)?(?:\s|$)'))
-async def clearmyproxy_command(event):
-    user_id = event.sender_id
-    if is_banned(user_id):
-        return await event.reply("🚫 You are banned!", parse_mode='html')
-    
-    if clear_user_proxies(user_id):
-        await event.reply("✅ <b>All Personal Proxies Cleared!</b>", parse_mode='html')
-    else:
-        await event.reply("❌ You don't have any personal proxies.", parse_mode='html')
-
-@bot.on(events.NewMessage(pattern=r'^/cc(@\w+)?(\s+)?'))
+    await status_msg.edit(msg, parse_mode='html')
+@bot.on(events.NewMessage(pattern=r'^/cc(@\w+)?(\s+.*)?$'))
 async def cc_command(event):
     user_id = event.sender_id
     if is_banned(user_id):
         return await event.reply("🚫 You are banned!", parse_mode='html')
-    
-    is_group = event.is_group
-    if is_group:
-        if not is_group_enabled(event.chat_id):
-            return
-    else:
-        if not is_premium(user_id) and not is_admin(user_id):
-            return await event.reply("❌ <b>Premium Required!</b>\n\nUse /plans to upgrade.", parse_mode='html')
-    
-    # Rate limit
-    can_proceed, wait_time = check_rate_limit(user_id)
-    if not can_proceed and not is_admin(user_id):
-        return await event.reply(f"⏳ Rate limit! Wait {wait_time}s", parse_mode='html')
-    
-    args = event.message.text.split(maxsplit=1)
-    if len(args) < 2:
-        return await event.reply("❌ Usage: <code>/cc 5154623245618097|03|2032|156</code>", parse_mode='html')
-    
-    card_text = args[1].strip()
-    cards = extract_cc(card_text)
-    
+
+    if not check_rate_limit(user_id):
+        return
+
+    args = event.message.text.split()
+    if len(args) != 2:
+        return await event.reply("❌ Usage: <code>/cc 4000220000000000|12|2026|123</code>", parse_mode='html')
+
+    card_input = args[1].strip()
+    cards = extract_cc(card_input)
+
     if not cards:
-        return await event.reply("❌ Invalid card format!\n\nFormat: <code>card|mm|yy|cvv</code>", parse_mode='html')
-    
+        return await event.reply("❌ Invalid card format. Use: <code>cc|mm|yy|cvv</code>", parse_mode='html')
+
     card = cards[0]
-    
-    # Deduct credit (not for group)
-    if not is_group and not is_admin(user_id):
-        success, remaining = deduct_credit(user_id)
-        if not success:
-            return await event.reply(f"❌ Insufficient credits!\n\n💰 Your balance: {remaining}\nUse /redeemcredit to add credits.", parse_mode='html')
-        await check_credits_low(user_id)
-    
+
+    credits = get_user_credits(user_id)
+    if credits < 1:
+        if is_admin(user_id):
+            pass
+        else:
+            return await event.reply("❌ <b>No credits!</b>\n\n💰 Redeem credits: /redeemcredit\n💎 Get Premium: /plans", parse_mode='html')
+
     sites = load_sites()
     proxies = load_proxies()
-    
-    # Use user's personal proxies if available
-    user_proxies = get_user_specific_proxies(user_id)
-    if user_proxies:
-        proxies = user_proxies
-    
+
     if not sites:
-        return await event.reply("❌ No sites available. Contact admin.", parse_mode='html')
+        return await event.reply("❌ <b>No sites available!</b>", parse_mode='html')
     if not proxies:
-        return await event.reply("❌ No proxies available. Contact admin.", parse_mode='html')
-    
-    status_msg = await event.reply("🔄 <b>Checking card...</b>", parse_mode='html')
-    
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, lambda: asyncio.run(check_card_with_retry(card, sites, proxies)))
-    
-    status_text = result['status']
+        return await event.reply("❌ <b>No proxies available!</b>", parse_mode='html')
+
+    status_msg = await event.reply("🔄 <b>Checking card...</b>\n\n💳 <code>{}</code>".format(card), parse_mode='html')
+
+    if not is_admin(user_id) and not is_premium(user_id):
+        deduct_credit(user_id)
+
+    if is_premium(user_id):
+        user_proxies = get_user_specific_proxies(user_id)
+        if user_proxies:
+            proxies_to_use = user_proxies + proxies
+        else:
+            proxies_to_use = proxies
+    else:
+        proxies_to_use = proxies
+
+    result = await check_card_with_retry(card, sites, proxies_to_use)
+
+    status = result.get('status', 'Dead')
     response_msg = result.get('message', '')
     gateway = result.get('gateway', 'Unknown')
     price = result.get('price', '-')
-    
-    bin_num = card.split('|')[0][:6]
-    brand, bin_type, level, bank, country, flag = await get_bin_info(bin_num)
-    
-    if status_text == "Charged":
-        status_emoji = "⚡"
-        record_hit(user_id, 'charged')
-        username = event.sender.username
-        try:
-            await send_realtime_hit_to_user(user_id, "CHARGED", card, response_msg, gateway, price)
-        except:
-            pass
-        try:
-            await send_log_to_channel(response_msg, gateway, price, username, user_id, card)
-        except:
-            pass
-    elif status_text == "Approved":
-        status_emoji = "💀"
-        record_hit(user_id, 'approved')
-        try:
-            await send_realtime_hit_to_user(user_id, "APPROVED", card, response_msg, gateway, price)
-        except:
-            pass
-    else:
-        status_emoji = "⬛"
-        record_dead(user_id)
-    
-    remaining_credits = get_user_credits(user_id)
-    
-    result_text = f"""<b>💀💳 Dark Checker 💳💀</b>
-<b>─────────────────────</b>
-{status_emoji} <b>Status:</b> {status_text} (via /cc)
-<blockquote>💳 Card: <code>{card}</code></blockquote>
-<blockquote>📝 Response: {response_msg[:150]}</blockquote>
-<blockquote>🌐 Gateway: 🔥 {gateway} | 💰 {price}</blockquote>
-<b>─────────────────────</b>
-<b>📊 BIN INFO</b>
-<pre>🏦 Brand: {brand} - {bin_type} - {level}
-🏛️ Bank: {bank}
-🌍 Country: {country} {flag}</pre>
-<b>─────────────────────</b>
-💰 <b>Credits Left:</b> {remaining_credits}
-<b>─────────────────────</b>
-🤖 <b>Bot By: <a href="tg://user?id=7415233736">BUBU</a></b>"""
-    
-    await status_msg.edit(result_text, parse_mode='html')
 
-@bot.on(events.NewMessage(pattern=r'^/chk(@\w+)?(\s+)?'))
+    if status == 'Charged':
+        hit_type = "charged"
+        emoji = "⚡"
+        record_hit(user_id, "charged")
+        username = event.sender.username
+        await send_log_to_channel(response_msg, gateway, price, username, user_id, card)
+    elif status == 'Approved':
+        hit_type = "approved"
+        emoji = "💀"
+        record_hit(user_id, "approved")
+    elif status in ['Site Error', 'Invalid Format']:
+        hit_type = "dead"
+        emoji = "⚠️"
+        record_hit(user_id, "dead")
+    else:
+        hit_type = "dead"
+        emoji = "⬛"
+        record_hit(user_id, "dead")
+
+    final_msg = f"{emoji} <b>{status.upper()}</b>\n"
+    final_msg += f"<b>─────────────────────</b>\n"
+    final_msg += f"<b>Card ➡</b> <code>{card}</code>\n"
+    final_msg += f"<b>Response ➡</b> {response_msg[:200]}\n"
+    final_msg += f"<b>Gateway ➡</b> {gateway}\n"
+    final_msg += f"<b>Price ➡</b> {price}\n"
+    final_msg += f"<b>─────────────────────</b>\n"
+    final_msg += f"<b>👤 User:</b> <code>{user_id}</code>\n"
+    final_msg += f"<b>📋 Plan:</b> {get_user_plan_name(user_id)}\n"
+    final_msg += f"<b>💰 Credits Left:</b> {get_user_credits(user_id)}\n"
+    final_msg += f"<b>─────────────────────</b>\n"
+    final_msg += "🤖 <b>Bot By: <a href=\"tg://user?id=7415233736\">BUBU</a></b>"
+
+    try:
+        await status_msg.edit(final_msg, parse_mode='html')
+    except:
+        await status_msg.edit(final_msg)
+
+    if hit_type in ["charged", "approved"]:
+        await send_realtime_hit_to_user(user_id, hit_type.upper(), card, response_msg, gateway, price)
+
+    await check_credits_low(user_id)
+
+@bot.on(events.NewMessage(pattern=r'^/chk(@\w+)?(\s+.*)?$'))
 async def chk_command(event):
     user_id = event.sender_id
     if is_banned(user_id):
         return await event.reply("🚫 You are banned!", parse_mode='html')
-    
-    if not event.is_group:
-        if not is_premium(user_id) and not is_admin(user_id):
-            return await event.reply("❌ <b>Premium Required!</b>\n\nUse /plans to upgrade.", parse_mode='html')
-    
+
     if not event.reply_to_msg_id:
-        return await event.reply("❌ Reply to a <code>.txt</code> file with <code>/chk</code>\n\nFile format: one card per line\n<code>card|mm|yy|cvv</code>", parse_mode='html')
-    
+        return await event.reply("❌ Reply to a <code>.txt</code> file with <code>/chk</code>", parse_mode='html')
+
     replied = await event.get_reply_message()
     if not replied.file:
         return await event.reply("❌ No file found. Reply to a .txt file!", parse_mode='html')
-    
-    if not replied.file.name.endswith('.txt'):
-        return await event.reply("❌ Only .txt files supported!", parse_mode='html')
-    
-    status_msg = await event.reply("⏳ Downloading file...", parse_mode='html')
-    
-    file_path = f"cards_{user_id}.txt"
-    await bot.download_media(replied, file_path)
-    
-    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-        lines = [line.strip() for line in f if line.strip()]
-    
-    os.remove(file_path)
-    
-    cards = []
-    for line in lines:
-        extracted = extract_cc(line)
-        cards.extend(extracted)
-    
-    if not cards:
-        return await status_msg.edit("❌ No valid cards found in the file.\n\nFormat: <code>card|mm|yy|cvv</code>", parse_mode='html')
-    
-    original_count = len(cards)
-    
-    # Limit cards based on credits (non-admin, non-group)
-    if not event.is_group and not is_admin(user_id):
-        user_credits = get_user_credits(user_id)
-        if original_count > user_credits:
-            cards = cards[:user_credits]
-    
-    total_cards = len(cards)
-    
-    if total_cards == 0:
-        return await status_msg.edit("❌ Insufficient credits!", parse_mode='html')
-    
+
+    credits = get_user_credits(user_id)
+    if credits < 1:
+        if is_admin(user_id):
+            pass
+        else:
+            return await event.reply("❌ <b>No credits!</b>\n\n💰 Redeem credits: /redeemcredit\n💎 Get Premium: /plans", parse_mode='html')
+
     sites = load_sites()
     proxies = load_proxies()
-    user_proxies = get_user_specific_proxies(user_id)
-    if user_proxies:
-        proxies = user_proxies
-    
-    if not sites:
-        return await status_msg.edit("❌ No sites available. Contact admin.", parse_mode='html')
-    if not proxies:
-        return await status_msg.edit("❌ No proxies available. Contact admin.", parse_mode='html')
-    
-    # Deduct credits upfront
-    if not event.is_group and not is_admin(user_id):
-        for _ in range(total_cards):
-            deduct_credit(user_id)
-        await check_credits_low(user_id)
-    
-    await status_msg.edit(f"🔄 Starting check of {total_cards} cards...", parse_mode='html')
-    
-    results = {
-        'charged': [],
-        'approved': [],
-        'dead': [],
-        'start_time': time.time(),
-        'total': total_cards
-    }
-    
-    progress_msg = await bot.send_message(user_id, "Initializing...", parse_mode='html')
-    
-    session_id = f"{user_id}_{int(time.time())}"
-    active_sessions[session_id] = {'status': 'active', 'user_id': user_id}
-    
-    try:
-        for idx, card in enumerate(cards):
-            if session_id not in active_sessions:
-                break
-            
-            while active_sessions.get(session_id, {}).get('status') == 'paused':
-                await asyncio.sleep(1)
-            
-            if session_id not in active_sessions:
-                break
-            
-            result = await check_card_with_retry(card, sites, proxies)
-            
-            status = result['status']
-            if status == 'Charged':
-                results['charged'].append(result)
-                record_hit(user_id, 'charged')
-                username = event.sender.username
-                try:
-                    await send_realtime_hit_to_user(user_id, "CHARGED", card, result.get('message', ''), result.get('gateway', 'Unknown'), result.get('price', '-'))
-                except:
-                    pass
-                try:
-                    await send_log_to_channel(result.get('message', ''), result.get('gateway', 'Unknown'), result.get('price', '-'), username, user_id, card)
-                except:
-                    pass
-            elif status == 'Approved':
-                results['approved'].append(result)
-                record_hit(user_id, 'approved')
-                try:
-                    await send_realtime_hit_to_user(user_id, "APPROVED", card, result.get('message', ''), result.get('gateway', 'Unknown'), result.get('price', '-'))
-                except:
-                    pass
-            else:
-                results['dead'].append(result)
-                record_dead(user_id)
-            
-            if (idx + 1) % 5 == 0:
-                await update_progress(user_id, progress_msg.id, results, idx + 1)
-            
-            await asyncio.sleep(0.2)
-        
-        if session_id in active_sessions:
-            del active_sessions[session_id]
-        
-        await update_progress(user_id, progress_msg.id, results, total_cards)
-        await send_final_results(user_id, results)
-        
-    except Exception as e:
-        if session_id in active_sessions:
-            del active_sessions[session_id]
-        await status_msg.edit(f"❌ Error: {e}", parse_mode='html')
 
-@bot.on(events.NewMessage(pattern=r'^/multi(@\w+)?(\s+)?'))
+    if not sites:
+        return await event.reply("❌ <b>No sites available!</b>", parse_mode='html')
+    if not proxies:
+        return await event.reply("❌ <b>No proxies available!</b>", parse_mode='html')
+
+    if is_premium(user_id):
+        user_proxies = get_user_specific_proxies(user_id)
+        if user_proxies:
+            proxies_to_use = user_proxies + proxies
+        else:
+            proxies_to_use = proxies
+    else:
+        proxies_to_use = proxies
+
+    status_msg = await event.reply("⏳ Downloading file...", parse_mode='html')
+
+    file_path = f"cards_chk_{user_id}.txt"
+    await bot.download_media(replied, file_path)
+
+    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+        content = f.read()
+
+    os.remove(file_path)
+
+    all_cards = extract_cc(content)
+    if not all_cards:
+        return await status_msg.edit("❌ No valid cards found in file!", parse_mode='html')
+
+    total_cards = len(all_cards)
+    max_check = min(total_cards, credits) if not is_admin(user_id) else total_cards
+
+    if not is_admin(user_id) and not is_premium(user_id):
+        max_check = min(max_check, credits)
+
+    cards_to_check = all_cards[:max_check]
+
+    charged_count = 0
+    approved_count = 0
+    dead_count = 0
+    error_count = 0
+
+    await status_msg.edit(f"🔄 <b>Checking...</b>\n\n💳 Card: 1/{len(cards_to_check)}\n⚡ Charged: 0\n💀 Approved: 0\n⬛ Dead: 0", parse_mode='html')
+
+    for i, card in enumerate(cards_to_check):
+        result = await check_card_with_retry(card, sites, proxies_to_use)
+
+        status = result.get('status', 'Dead')
+        response_msg = result.get('message', '')
+        gateway = result.get('gateway', 'Unknown')
+        price = result.get('price', '-')
+
+        if status == 'Charged':
+            charged_count += 1
+            record_hit(user_id, "charged")
+            username = event.sender.username
+            await send_log_to_channel(response_msg, gateway, price, username, user_id, card)
+            await send_realtime_hit_to_user(user_id, "CHARGED", card, response_msg, gateway, price)
+        elif status == 'Approved':
+            approved_count += 1
+            record_hit(user_id, "approved")
+            await send_realtime_hit_to_user(user_id, "APPROVED", card, response_msg, gateway, price)
+        elif status in ['Site Error', 'Dead']:
+            dead_count += 1
+            record_hit(user_id, "dead")
+        else:
+            error_count += 1
+            record_hit(user_id, "dead")
+
+        if not is_admin(user_id):
+            deduct_credit(user_id)
+
+        if (i + 1) % 5 == 0 or i == len(cards_to_check) - 1:
+            try:
+                await status_msg.edit(
+                    f"🔄 <b>Checking...</b>\n\n"
+                    f"💳 Card: {i+1}/{len(cards_to_check)}\n"
+                    f"⚡ Charged: {charged_count}\n"
+                    f"💀 Approved: {approved_count}\n"
+                    f"⬛ Dead: {dead_count}\n"
+                    f"⚠️ Error: {error_count}",
+                    parse_mode='html'
+                )
+            except:
+                pass
+
+        if not is_admin(user_id):
+            current_credits = get_user_credits(user_id)
+            if current_credits <= 0:
+                break
+
+    summary = f"""✅ <b>Check Complete!</b>
+<b>─────────────────────</b>
+<b>💳 Total Cards:</b> {len(cards_to_check)}
+<b>⚡ Charged:</b> {charged_count}
+<b>💀 Approved:</b> {approved_count}
+<b>⬛ Dead:</b> {dead_count}
+<b>⚠️ Error:</b> {error_count}
+<b>─────────────────────</b>
+<b>📋 Plan:</b> {get_user_plan_name(user_id)}
+<b>💰 Credits Left:</b> {get_user_credits(user_id)}
+<b>─────────────────────</b>
+🤖 <b>Bot By: <a href="tg://user?id=7415233736">BUBU</a></b>"""
+
+    try:
+        await status_msg.edit(summary, parse_mode='html')
+    except:
+        await status_msg.edit(summary)
+
+    await check_credits_low(user_id)
+
+@bot.on(events.NewMessage(pattern=r'^/multi(@\w+)?(\s+.*)?$'))
 async def multi_command(event):
     user_id = event.sender_id
     if is_banned(user_id):
         return await event.reply("🚫 You are banned!", parse_mode='html')
-    
-    if not event.is_group:
-        if not is_premium(user_id) and not is_admin(user_id):
-            return await event.reply("❌ <b>Premium Required!</b>\n\nUse /plans to upgrade.", parse_mode='html')
-    
-    args = event.message.text.split(maxsplit=1)
-    if len(args) < 2:
-        return await event.reply("❌ Usage: <code>/multi card1|mm|yy|cvv card2|mm|yy|cvv ...</code>", parse_mode='html')
-    
-    card_text = args[1].strip()
-    cards = extract_cc(card_text)
-    
-    if not cards:
-        return await event.reply("❌ No valid cards found!\n\nFormat: <code>card|mm|yy|cvv</code>", parse_mode='html')
-    
-    # Limit by credits
-    if not event.is_group and not is_admin(user_id):
-        user_credits = get_user_credits(user_id)
-        if len(cards) > user_credits:
-            cards = cards[:user_credits]
-    
-    total_cards = len(cards)
-    if total_cards == 0:
-        return await event.reply("❌ Insufficient credits!", parse_mode='html')
-    
+
+    if not check_rate_limit(user_id):
+        return
+
+    full_text = event.message.text
+    lines = full_text.strip().split('\n')
+
+    if len(lines) < 2:
+        return await event.reply("❌ Usage:\n<code>/multi</code>\n<code>cc|mm|yy|cvv</code>\n<code>cc|mm|yy|cvv</code>", parse_mode='html')
+
+    card_lines = [line.strip() for line in lines[1:] if line.strip()]
+    all_cards = []
+    for line in card_lines:
+        cards = extract_cc(line)
+        all_cards.extend(cards)
+
+    if not all_cards:
+        return await event.reply("❌ No valid cards found!", parse_mode='html')
+
+    credits = get_user_credits(user_id)
+    if credits < 1:
+        if is_admin(user_id):
+            pass
+        else:
+            return await event.reply("❌ <b>No credits!</b>\n\n💰 Redeem credits: /redeemcredit\n💎 Get Premium: /plans", parse_mode='html')
+
     sites = load_sites()
     proxies = load_proxies()
-    user_proxies = get_user_specific_proxies(user_id)
-    if user_proxies:
-        proxies = user_proxies
-    
-    if not sites:
-        return await event.reply("❌ No sites available. Contact admin.", parse_mode='html')
-    if not proxies:
-        return await event.reply("❌ No proxies available. Contact admin.", parse_mode='html')
-    
-    # Deduct credits
-    if not event.is_group and not is_admin(user_id):
-        for _ in range(total_cards):
-            deduct_credit(user_id)
-        await check_credits_low(user_id)
-    
-    status_msg = await event.reply(f"🔄 Checking {total_cards} cards...", parse_mode='html')
-    
-    results = {
-        'charged': [],
-        'approved': [],
-        'dead': [],
-        'start_time': time.time(),
-        'total': total_cards
-    }
-    
-    progress_msg = await bot.send_message(user_id, "Initializing...", parse_mode='html')
-    
-    session_id = f"{user_id}_{int(time.time())}"
-    active_sessions[session_id] = {'status': 'active', 'user_id': user_id}
-    
-    try:
-        for idx, card in enumerate(cards):
-            if session_id not in active_sessions:
-                break
-            
-            while active_sessions.get(session_id, {}).get('status') == 'paused':
-                await asyncio.sleep(1)
-            
-            if session_id not in active_sessions:
-                break
-            
-            result = await check_card_with_retry(card, sites, proxies)
-            
-            status = result['status']
-            if status == 'Charged':
-                results['charged'].append(result)
-                record_hit(user_id, 'charged')
-                username = event.sender.username
-                try:
-                    await send_realtime_hit_to_user(user_id, "CHARGED", card, result.get('message', ''), result.get('gateway', 'Unknown'), result.get('price', '-'))
-                except:
-                    pass
-                try:
-                    await send_log_to_channel(result.get('message', ''), result.get('gateway', 'Unknown'), result.get('price', '-'), username, user_id, card)
-                except:
-                    pass
-            elif status == 'Approved':
-                results['approved'].append(result)
-                record_hit(user_id, 'approved')
-                try:
-                    await send_realtime_hit_to_user(user_id, "APPROVED", card, result.get('message', ''), result.get('gateway', 'Unknown'), result.get('price', '-'))
-                except:
-                    pass
-            else:
-                results['dead'].append(result)
-                record_dead(user_id)
-            
-            if (idx + 1) % 5 == 0:
-                await update_progress(user_id, progress_msg.id, results, idx + 1)
-            
-            await asyncio.sleep(0.2)
-        
-        if session_id in active_sessions:
-            del active_sessions[session_id]
-        
-        await update_progress(user_id, progress_msg.id, results, total_cards)
-        await send_final_results(user_id, results)
-        
-    except Exception as e:
-        if session_id in active_sessions:
-            del active_sessions[session_id]
-        await status_msg.edit(f"❌ Error: {e}", parse_mode='html')
 
-@bot.on(events.NewMessage(pattern=r'^/mcc(@\w+)?(\s+)?'))
+    if not sites:
+        return await event.reply("❌ <b>No sites available!</b>", parse_mode='html')
+    if not proxies:
+        return await event.reply("❌ <b>No proxies available!</b>", parse_mode='html')
+
+    if is_premium(user_id):
+        user_proxies = get_user_specific_proxies(user_id)
+        if user_proxies:
+            proxies_to_use = user_proxies + proxies
+        else:
+            proxies_to_use = proxies
+    else:
+        proxies_to_use = proxies
+
+    max_check = min(len(all_cards), credits) if not is_admin(user_id) else len(all_cards)
+
+    if not is_admin(user_id) and not is_premium(user_id):
+        max_check = min(max_check, credits)
+
+    cards_to_check = all_cards[:max_check]
+
+    status_msg = await event.reply(f"🔄 <b>Multi Check...</b>\n\n💳 Cards: {len(cards_to_check)}\n⚡ Charged: 0\n💀 Approved: 0\n⬛ Dead: 0", parse_mode='html')
+
+    charged_count = 0
+    approved_count = 0
+    dead_count = 0
+    error_count = 0
+
+    for i, card in enumerate(cards_to_check):
+        result = await check_card_with_retry(card, sites, proxies_to_use)
+
+        status = result.get('status', 'Dead')
+        response_msg = result.get('message', '')
+        gateway = result.get('gateway', 'Unknown')
+        price = result.get('price', '-')
+
+        if status == 'Charged':
+            charged_count += 1
+            record_hit(user_id, "charged")
+            username = event.sender.username
+            await send_log_to_channel(response_msg, gateway, price, username, user_id, card)
+            await send_realtime_hit_to_user(user_id, "CHARGED", card, response_msg, gateway, price)
+        elif status == 'Approved':
+            approved_count += 1
+            record_hit(user_id, "approved")
+            await send_realtime_hit_to_user(user_id, "APPROVED", card, response_msg, gateway, price)
+        elif status in ['Site Error', 'Dead']:
+            dead_count += 1
+            record_hit(user_id, "dead")
+        else:
+            error_count += 1
+            record_hit(user_id, "dead")
+
+        if not is_admin(user_id):
+            deduct_credit(user_id)
+
+        if (i + 1) % 5 == 0 or i == len(cards_to_check) - 1:
+            try:
+                await status_msg.edit(
+                    f"🔄 <b>Multi Check...</b>\n\n"
+                    f"💳 Card: {i+1}/{len(cards_to_check)}\n"
+                    f"⚡ Charged: {charged_count}\n"
+                    f"💀 Approved: {approved_count}\n"
+                    f"⬛ Dead: {dead_count}\n"
+                    f"⚠️ Error: {error_count}",
+                    parse_mode='html'
+                )
+            except:
+                pass
+
+        if not is_admin(user_id):
+            current_credits = get_user_credits(user_id)
+            if current_credits <= 0:
+                break
+
+    summary = f"""✅ <b>Multi Check Complete!</b>
+<b>─────────────────────</b>
+<b>💳 Total Cards:</b> {len(cards_to_check)}
+<b>⚡ Charged:</b> {charged_count}
+<b>💀 Approved:</b> {approved_count}
+<b>⬛ Dead:</b> {dead_count}
+<b>⚠️ Error:</b> {error_count}
+<b>─────────────────────</b>
+<b>📋 Plan:</b> {get_user_plan_name(user_id)}
+<b>💰 Credits Left:</b> {get_user_credits(user_id)}
+<b>─────────────────────</b>
+🤖 <b>Bot By: <a href="tg://user?id=7415233736">BUBU</a></b>"""
+
+    try:
+        await status_msg.edit(summary, parse_mode='html')
+    except:
+        await status_msg.edit(summary)
+
+    await check_credits_low(user_id)
+
+@bot.on(events.NewMessage(pattern=r'^/mcc(@\w+)?(\s+.*)?$'))
 async def mcc_command(event):
     user_id = event.sender_id
     if is_banned(user_id):
         return await event.reply("🚫 You are banned!", parse_mode='html')
-    
-    if not event.is_group:
-        if not is_premium(user_id) and not is_admin(user_id):
-            return await event.reply("❌ <b>Premium Required!</b>\n\nUse /plans to upgrade.", parse_mode='html')
-    
-    args = event.message.text.split(maxsplit=1)
-    if len(args) < 2:
-        return await event.reply("❌ Usage: <code>/mcc card|mm|yy|cvv</code>", parse_mode='html')
-    
-    card_text = args[1].strip()
-    cards = extract_cc(card_text)
-    
-    if not cards:
-        return await event.reply("❌ Invalid card format!\n\nFormat: <code>card|mm|yy|cvv</code>", parse_mode='html')
-    
-    card = cards[0]
-    sites = load_sites()
-    proxies = load_proxies()
-    user_proxies = get_user_specific_proxies(user_id)
-    if user_proxies:
-        proxies = user_proxies
-    
-    if not sites:
-        return await event.reply("❌ No sites available. Contact admin.", parse_mode='html')
-    if not proxies:
-        return await event.reply("❌ No proxies available. Contact admin.", parse_mode='html')
-    
-    # Deduct credits equal to number of sites
-    if not event.is_group and not is_admin(user_id):
-        user_credits = get_user_credits(user_id)
-        if user_credits < len(sites):
-            return await event.reply(f"❌ Insufficient credits!\n\n💰 Need: {len(sites)} credits\n💳 You have: {user_credits}", parse_mode='html')
-        for _ in range(len(sites)):
-            deduct_credit(user_id)
-        await check_credits_low(user_id)
-    
-    status_msg = await event.reply(f"🔄 Checking card against {len(sites)} sites...", parse_mode='html')
-    
-    results = {
-        'charged': [],
-        'approved': [],
-        'dead': [],
-        'start_time': time.time(),
-        'total': len(sites)
-    }
-    
-    for i, site in enumerate(sites):
-        proxy = random.choice(proxies)
-        result = await check_card(card, site, proxy)
-        
-        status = result['status']
-        if status == 'Charged':
-            results['charged'].append(result)
-            record_hit(user_id, 'charged')
-            username = event.sender.username
-            try:
-                await send_realtime_hit_to_user(user_id, "CHARGED", card, result.get('message', ''), result.get('gateway', 'Unknown'), result.get('price', '-'))
-            except:
-                pass
-            try:
-                await send_log_to_channel(result.get('message', ''), result.get('gateway', 'Unknown'), result.get('price', '-'), username, user_id, card)
-            except:
-                pass
-        elif status == 'Approved':
-            results['approved'].append(result)
-            record_hit(user_id, 'approved')
+
+    if not event.reply_to_msg_id:
+        return await event.reply("❌ Reply to a <code>.txt</code> with multiple cards + optional per-line proxies.", parse_mode='html')
+
+    replied = await event.get_reply_message()
+    if not replied.file:
+        return await event.reply("❌ No file found. Reply to a .txt file!", parse_mode='html')
+
+    credits = get_user_credits(user_id)
+    if credits < 1:
+        if is_admin(user_id):
+            pass
         else:
-            results['dead'].append(result)
-            record_dead(user_id)
-        
-        if (i + 1) % 10 == 0 or (i + 1) == len(sites):
-            progress = f"🔄 {i+1}/{len(sites)} sites checked\n⚡ {len(results['charged'])} Charged | 💀 {len(results['approved'])} Live | ⬛ {len(results['dead'])} Dead"
+            return await event.reply("❌ <b>No credits!</b>\n\n💰 Redeem credits: /redeemcredit\n💎 Get Premium: /plans", parse_mode='html')
+
+    sites = load_sites()
+    fallback_proxies = load_proxies()
+
+    if not sites:
+        return await event.reply("❌ <b>No sites available!</b>", parse_mode='html')
+    if not fallback_proxies:
+        return await event.reply("❌ <b>No proxies available!</b>", parse_mode='html')
+
+    if is_premium(user_id):
+        user_proxies = get_user_specific_proxies(user_id)
+        if user_proxies:
+            fallback_proxies = user_proxies + fallback_proxies
+
+    status_msg = await event.reply("⏳ Downloading file...", parse_mode='html')
+
+    file_path = f"cards_mcc_{user_id}.txt"
+    await bot.download_media(replied, file_path)
+
+    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+        lines = [line.strip() for line in f if line.strip()]
+
+    os.remove(file_path)
+
+    max_check = min(len(lines), credits) if not is_admin(user_id) else len(lines)
+
+    if not is_admin(user_id) and not is_premium(user_id):
+        max_check = min(max_check, credits)
+
+    lines_to_check = lines[:max_check]
+
+    if not lines_to_check:
+        return await status_msg.edit("❌ No lines found in file!", parse_mode='html')
+
+    charged_count = 0
+    approved_count = 0
+    dead_count = 0
+
+    await status_msg.edit(f"🔄 <b>Mass Check...</b>\n\n💳 Checking: {len(lines_to_check)} lines\n⚡ Charged: 0\n💀 Approved: 0\n⬛ Dead: 0", parse_mode='html')
+
+    for i, line in enumerate(lines_to_check):
+        parts = line.split()
+        custom_proxy = None
+
+        if len(parts) >= 5 and ':' in parts[4]:
+            card_text = ' '.join(parts[:4])
+            custom_proxy = parts[4]
+        else:
+            card_text = ' '.join(parts[:4])
+
+        cards = extract_cc(card_text)
+        if not cards:
+            continue
+
+        card = cards[0]
+
+        if custom_proxy:
+            proxies_to_use = [custom_proxy] + fallback_proxies
+        else:
+            proxies_to_use = fallback_proxies
+
+        result = await check_card_with_retry(card, sites, proxies_to_use)
+
+        status = result.get('status', 'Dead')
+        response_msg = result.get('message', '')
+        gateway = result.get('gateway', 'Unknown')
+        price = result.get('price', '-')
+
+        if status == 'Charged':
+            charged_count += 1
+            record_hit(user_id, "charged")
+            username = event.sender.username
+            await send_log_to_channel(response_msg, gateway, price, username, user_id, card)
+            await send_realtime_hit_to_user(user_id, "CHARGED", card, response_msg, gateway, price)
+        elif status == 'Approved':
+            approved_count += 1
+            record_hit(user_id, "approved")
+            await send_realtime_hit_to_user(user_id, "APPROVED", card, response_msg, gateway, price)
+        else:
+            dead_count += 1
+            record_hit(user_id, "dead")
+
+        if not is_admin(user_id):
+            deduct_credit(user_id)
+
+        if (i + 1) % 5 == 0 or i == len(lines_to_check) - 1:
             try:
-                await status_msg.edit(progress, parse_mode='html')
+                await status_msg.edit(
+                    f"🔄 <b>Mass Check...</b>\n\n"
+                    f"💳 Line: {i+1}/{len(lines_to_check)}\n"
+                    f"⚡ Charged: {charged_count}\n"
+                    f"💀 Approved: {approved_count}\n"
+                    f"⬛ Dead: {dead_count}",
+                    parse_mode='html'
+                )
             except:
                 pass
-        
-        await asyncio.sleep(0.1)
-    
-    await send_final_results(user_id, results)
 
-# ========== CALLBACK HANDLERS ==========
-@bot.on(events.CallbackQuery(pattern=b"pause"))
-async def pause_callback(event):
-    user_id = event.sender_id
-    for sid, sdata in active_sessions.items():
-        if sdata['user_id'] == user_id:
-            active_sessions[sid]['status'] = 'paused'
-            await event.answer("⏸️ Checker paused!")
-            return
-    await event.answer("❌ No active checker session found.", alert=True)
+        if not is_admin(user_id):
+            current_credits = get_user_credits(user_id)
+            if current_credits <= 0:
+                break
 
-@bot.on(events.CallbackQuery(pattern=b"resume"))
-async def resume_callback(event):
-    user_id = event.sender_id
-    for sid, sdata in active_sessions.items():
-        if sdata['user_id'] == user_id:
-            active_sessions[sid]['status'] = 'active'
-            await event.answer("▶️ Checker resumed!")
-            return
-    await event.answer("❌ No active checker session found.", alert=True)
-
-@bot.on(events.CallbackQuery(pattern=b"stop"))
-async def stop_callback(event):
-    user_id = event.sender_id
-    sessions_to_remove = []
-    for sid, sdata in active_sessions.items():
-        if sdata['user_id'] == user_id:
-            sessions_to_remove.append(sid)
-    for sid in sessions_to_remove:
-        del active_sessions[sid]
-    if sessions_to_remove:
-        await event.answer("⏹️ Checker stopped!")
-    else:
-        await event.answer("❌ No active checker session found.", alert=True)
-
-# ========== ADDITIONAL USER COMMANDS ==========
-@bot.on(events.NewMessage(pattern=r'^/refer(@\w+)?(?:\s|$)'))
-async def refer_command(event):
-    user_id = event.sender_id
-    if is_banned(user_id):
-        return await event.reply("🚫 You are banned!", parse_mode='html')
-    
-    code = get_referral_code(user_id)
-    bot_username = (await bot.get_me()).username
-    ref_link = f"https://t.me/{bot_username}?start={code}"
-    
-    data = load_referrals()
-    user_data = data.get(str(user_id), {})
-    total_referred = len(user_data.get('referred', []))
-    total_earned = user_data.get('total_earned', 0)
-    
-    text = f"""<b>👥 Your Referral Info</b>
+    summary = f"""✅ <b>Mass Check Complete!</b>
 <b>─────────────────────</b>
-
-🔗 <b>Referral Link:</b>
-<code>{ref_link}</code>
-
-📊 <b>Stats:</b>
-<blockquote>👥 Total Referred: {total_referred}
-💰 Total Earned: {total_earned} credits</blockquote>
-
-💡 Each referral earns you <b>{REFERRAL_REWARD} credits</b>!
-Share your link with friends to earn free credits!
-
+<b>💳 Lines Checked:</b> {len(lines_to_check)}
+<b>⚡ Charged:</b> {charged_count}
+<b>💀 Approved:</b> {approved_count}
+<b>⬛ Dead:</b> {dead_count}
+<b>─────────────────────</b>
+<b>📋 Plan:</b> {get_user_plan_name(user_id)}
+<b>💰 Credits Left:</b> {get_user_credits(user_id)}
 <b>─────────────────────</b>
 🤖 <b>Bot By: <a href="tg://user?id=7415233736">BUBU</a></b>"""
-    
-    await event.reply(text, parse_mode='html')
 
-@bot.on(events.NewMessage(pattern=r'^/myhistory(@\w+)?(?:\s|$)'))
-async def myhistory_command(event):
+    try:
+        await status_msg.edit(summary, parse_mode='html')
+    except:
+        await status_msg.edit(summary)
+
+    await check_credits_low(user_id)
+
+@bot.on(events.NewMessage(pattern=r'^/myhistory(@\w+)?(\s+.*)?$'))
+async def myhistory(event):
     user_id = event.sender_id
     if is_banned(user_id):
         return await event.reply("🚫 You are banned!", parse_mode='html')
-    
-    data = load_hit_stats()
+
+    hit_data = load_hit_stats()
     uid = str(user_id)
-    user_stats = data.get(uid, {'charged': 0, 'approved': 0, 'dead': 0, 'total': 0})
-    
-    text = f"""<b>📊 Your Hit Statistics</b>
+    user_stats = hit_data.get(uid, {"charged": 0, "approved": 0, "dead": 0, "total": 0})
+
+    text = f"""<b>📊 YOUR HISTORY</b>
 <b>─────────────────────</b>
-
-<blockquote>⚡ Charged: {user_stats.get('charged', 0)}
-💀 Approved: {user_stats.get('approved', 0)}
-⬛ Dead: {user_stats.get('dead', 0)}
-💳 Total Checks: {user_stats.get('total', 0)}</blockquote>
-
+<b>⚡ Charged:</b> {user_stats.get('charged', 0)}
+<b>💀 Approved:</b> {user_stats.get('approved', 0)}
+<b>⬛ Dead:</b> {user_stats.get('dead', 0)}
+<b>📊 Total:</b> {user_stats.get('total', 0)}
+<b>─────────────────────</b>
+<b>📋 Plan:</b> {get_user_plan_name(user_id)}
+<b>💰 Credits:</b> {get_user_credits(user_id)}
 <b>─────────────────────</b>
 🤖 <b>Bot By: <a href="tg://user?id=7415233736">BUBU</a></b>"""
-    
+
     await event.reply(text, parse_mode='html')
 
-@bot.on(events.NewMessage(pattern=r'^/topusers(@\w+)?(?:\s|$)'))
-async def topusers_command(event):
+@bot.on(events.NewMessage(pattern=r'^/topusers(@\w+)?(\s+.*)?$'))
+async def topusers(event):
     user_id = event.sender_id
     if is_banned(user_id):
         return await event.reply("🚫 You are banned!", parse_mode='html')
-    
-    data = load_hit_stats()
-    if not data:
-        return await event.reply("❌ No hit data available yet.", parse_mode='html')
-    
-    # Sort by charged hits
-    sorted_users = sorted(data.items(), key=lambda x: x[1].get('charged', 0), reverse=True)[:10]
-    
-    text = f"<b>🏆 Top 10 Users - Charged Hits</b>\n<b>─────────────────────</b>\n\n"
-    medals = ["🥇", "🥈", "🥉"] + ["4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
-    
-    for i, (uid, stats) in enumerate(sorted_users):
-        medal = medals[i] if i < len(medals) else "➡️"
-        text += f"<blockquote>{medal} <code>{uid}</code> — ⚡ {stats.get('charged', 0)} Charged | 💀 {stats.get('approved', 0)} Live | 📊 {stats.get('total', 0)} Total</blockquote>\n"
-    
-    text += f"\n<b>─────────────────────</b>\n🤖 <b>Bot By: <a href=\"tg://user?id=7415233736\">BUBU</a></b>"
-    
+
+    hit_data = load_hit_stats()
+    if not hit_data:
+        return await event.reply("❌ No stats yet!", parse_mode='html')
+
+    sorted_users = sorted(hit_data.items(), key=lambda x: x[1].get('charged', 0) + x[1].get('approved', 0), reverse=True)
+
+    text = "<b>🏆 TOP USERS</b>\n<b>─────────────────────</b>\n"
+    for i, (uid, stats) in enumerate(sorted_users[:10]):
+        charged = stats.get('charged', 0)
+        approved = stats.get('approved', 0)
+        total = stats.get('total', 0)
+        medal = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else "👤"
+        text += f"{medal} <b><code>{uid}</code></b> ⚡{charged} 💀{approved} 📊{total}\n"
+
+    text += "<b>─────────────────────</b>\n"
+    text += "🤖 <b>Bot By: <a href=\"tg://user?id=7415233736\">BUBU</a></b>"
+
     await event.reply(text, parse_mode='html')
 
-@bot.on(events.NewMessage(pattern=r'^/transfercredits(@\w+)?(\s+)?'))
-async def transfercredits_command(event):
+@bot.on(events.NewMessage(pattern=r'^/refer(@\w+)?(\s+.*)?$'))
+async def refer(event):
     user_id = event.sender_id
     if is_banned(user_id):
         return await event.reply("🚫 You are banned!", parse_mode='html')
-    
+
+    bot_username = (await bot.get_me()).username
+    ref_link = f"https://t.me/{bot_username}?start={user_id}"
+
+    referrals = load_referrals()
+    uid = str(user_id)
+    total_earned = referrals.get(uid, {}).get('total_earned', 0)
+
+    text = f"""<b>🔗 YOUR REFERRAL LINK</b>
+<b>─────────────────────</b>
+<b>Link:</b> <code>{ref_link}</code>
+<b>💰 Earned from referrals:</b> {total_earned} credits
+<b>🎁 Reward per referral:</b> {REFERRAL_REWARD} credits
+<b>─────────────────────</b>
+Share this link to earn credits!
+🤖 <b>Bot By: <a href="tg://user?id=7415233736">BUBU</a></b>"""
+
+    await event.reply(text, parse_mode='html')
+
+@bot.on(events.NewMessage(pattern=r'^/transfercredits(@\w+)?(\s+.*)?$'))
+async def transfercredits(event):
+    user_id = event.sender_id
+    if is_banned(user_id):
+        return await event.reply("🚫 You are banned!", parse_mode='html')
+
     args = event.message.text.split()
-    if len(args) != 3:
+    if len(args) < 3:
         return await event.reply("❌ Usage: <code>/transfercredits user_id amount</code>", parse_mode='html')
-    
+
     try:
         target_id = int(args[1])
         amount = int(args[2])
     except:
-        return await event.reply("❌ Invalid user_id or amount.", parse_mode='html')
-    
+        return await event.reply("❌ Invalid user_id or amount!", parse_mode='html')
+
     if amount <= 0:
         return await event.reply("❌ Amount must be positive!", parse_mode='html')
-    
-    if target_id == user_id:
-        return await event.reply("❌ You cannot transfer credits to yourself!", parse_mode='html')
-    
-    user_credits = get_user_credits(user_id)
-    if user_credits < amount:
-        return await event.reply(f"❌ Insufficient credits!\n\n💰 Your balance: {user_credits}\n💸 Transfer amount: {amount}", parse_mode='html')
-    
+
+    my_credits = get_user_credits(user_id)
+    if my_credits < amount:
+        return await event.reply(f"❌ You don't have enough credits!\n\n💰 Your balance: {my_credits}", parse_mode='html')
+
     remove_credits(user_id, amount)
     add_credits(target_id, amount)
-    
-    new_balance = get_user_credits(user_id)
-    
-    await event.reply(f"✅ <b>Credits Transferred!</b>\n\n💰 Amount: {amount} credits\n👤 To: <code>{target_id}</code>\n💳 Your new balance: {new_balance}", parse_mode='html')
-    
+
+    await event.reply(
+        f"✅ <b>Transfer Successful!</b>\n\n"
+        f"👤 To: <code>{target_id}</code>\n"
+        f"💰 Amount: {amount} credits\n"
+        f"💰 Your new balance: {get_user_credits(user_id)}",
+        parse_mode='html')
+
     try:
-        await bot.send_message(target_id, f"💰 <b>You received {amount} credits!</b>\n\nFrom: <code>{user_id}</code>\n\nUse /info to check your balance.", parse_mode='html')
+        await bot.send_message(target_id,
+            f"💰 <b>Credits Received!</b>\n\n"
+            f"👤 From: <code>{user_id}</code>\n"
+            f"💰 Amount: {amount} credits\n"
+            f"💰 New Balance: {get_user_credits(target_id)}",
+            parse_mode='html')
     except:
         pass
 
-@bot.on(events.NewMessage(pattern=r'^/ping(@\w+)?(?:\s|$)'))
-async def ping_command(event):
+@bot.on(events.NewMessage(pattern=r'^/ping(@\w+)?(\s+.*)?$'))
+async def ping(event):
+    import time as time_module
+    start = time_module.time()
+    msg = await event.reply("🏓 Pong!")
+    end = time_module.time()
+    latency = round((end - start) * 1000)
+
+    await msg.edit(
+        f"🏓 <b>Pong!</b>\n\n"
+        f"⚡ Latency: <code>{latency}ms</code>\n"
+        f"📊 Sites: <code>{len(load_sites())}</code>\n"
+        f"🔌 Proxies: <code>{len(load_proxies())}</code>\n"
+        f"💎 Premium Users: <code>{len(load_premium_users())}</code>",
+        parse_mode='html')
+
+@bot.on(events.NewMessage(pattern=r'^/myproxy(@\w+)?(\s+)?'))
+async def myproxy_command(event):
     user_id = event.sender_id
     if is_banned(user_id):
         return await event.reply("🚫 You are banned!", parse_mode='html')
-    
-    start_time = time.time()
-    msg = await event.reply("🏓 Pong!", parse_mode='html')
-    end_time = time.time()
-    
-    latency = round((end_time - start_time) * 1000, 2)
-    await msg.edit(f"🏓 <b>Pong!</b>\n\n⏱️ Latency: <code>{latency}ms</code>", parse_mode='html')
 
-@bot.on(events.NewMessage(pattern=r'^/allstats(@\w+)?(?:\s|$)'))
-async def allstats_admin(event):
-    user_id = event.sender_id
-    if not is_admin(user_id):
-        return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
-    hit_data = load_hit_stats()
-    if not hit_data:
-        return await event.reply("❌ No hit data available.", parse_mode='html')
-    
-    total_charged = sum(s.get('charged', 0) for s in hit_data.values())
-    total_approved = sum(s.get('approved', 0) for s in hit_data.values())
-    total_dead = sum(s.get('dead', 0) for s in hit_data.values())
-    total_checks = sum(s.get('total', 0) for s in hit_data.values())
-    
-    text = f"""<b>📊 Full Hit Statistics</b>
+    if not is_premium(user_id):
+        return await event.reply("❌ <b>Premium only!</b>\n\nUse /plans to upgrade.", parse_mode='html')
+
+    full_text = event.message.text
+    lines = full_text.strip().split('\n')
+
+    if len(lines) < 2:
+        user_proxies = get_user_specific_proxies(user_id)
+        if user_proxies:
+            proxies_text = "\n".join([f"🔌 <code>{p}</code>" for p in user_proxies[:20]])
+            await event.reply(
+                f"🔌 <b>Your Proxies ({len(user_proxies)})</b>\n\n"
+                f"{proxies_text}\n\n"
+                f"<b>To add:</b> Send new proxies after /myproxy",
+                parse_mode='html')
+        else:
+            await event.reply(
+                "❌ You have no custom proxies.\n\n"
+                "Usage:\n<code>/myproxy</code>\n<code>ip:port:user:pass</code>\n<code>ip:port:user:pass</code>",
+                parse_mode='html')
+        return
+
+    proxy_lines = [p.strip() for p in lines[1:] if p.strip()]
+
+    data = load_user_proxies()
+    uid = str(user_id)
+    if uid not in data:
+        data[uid] = []
+    data[uid] = proxy_lines
+    save_user_proxies(data)
+
+    await event.reply(f"✅ <b>Your Proxies Updated!</b>\n\n🔌 Total: {len(proxy_lines)} proxies saved.", parse_mode='html')
+
+@bot.on(events.CallbackQuery())
+async def callback_handler(event):
+    data = event.data.decode('utf-8')
+
+    if data == 'get_sites_file':
+        user_id = event.sender_id
+        if is_banned(user_id):
+            await event.answer("🚫 You are banned!", alert=True)
+            return
+
+        if not os.path.exists(SITES_FILE):
+            await event.answer("❌ sites.txt not found!", alert=True)
+            return
+
+        sites = get_file_lines(SITES_FILE)
+        if not sites:
+            await event.answer("❌ sites.txt is empty!", alert=True)
+            return
+
+        try:
+            await bot.send_file(user_id, SITES_FILE,
+                caption=f"📄 <b>Sites File</b>\n\n📊 Total Sites: {len(sites)}\n\n🤖 <b>Bot By: <a href=\"tg://user?id=7415233736\">BUBU</a></b>",
+                parse_mode='html')
+            await event.answer("✅ File sent!", alert=True)
+        except Exception as e:
+            await event.answer(f"❌ Failed: {e}", alert=True)
+
+    elif data == 'get_proxy_file':
+        user_id = event.sender_id
+        if is_banned(user_id):
+            await event.answer("🚫 You are banned!", alert=True)
+            return
+
+        if not os.path.exists(PROXY_FILE):
+            await event.answer("❌ proxy.txt not found!", alert=True)
+            return
+
+        proxies = get_file_lines(PROXY_FILE)
+        if not proxies:
+            await event.answer("❌ proxy.txt is empty!", alert=True)
+            return
+
+        try:
+            await bot.send_file(user_id, PROXY_FILE,
+                caption=f"🔌 <b>Proxy File</b>\n\n📊 Total Proxies: {len(proxies)}\n\n🤖 <b>Bot By: <a href=\"tg://user?id=7415233736\">BUBU</a></b>",
+                parse_mode='html')
+            await event.answer("✅ File sent!", alert=True)
+        except Exception as e:
+            await event.answer(f"❌ Failed: {e}", alert=True)
+
+    elif data.startswith('filter_'):
+        filter_key = data.replace('filter_', '')
+        global ACTIVE_FILTER
+        if filter_key in SITE_FILTERS:
+            ACTIVE_FILTER = filter_key
+            await event.answer(f"✅ Filter: {SITE_FILTERS[filter_key]['name']}", alert=True)
+        else:
+            await event.answer("❌ Invalid filter!", alert=True)
+
+    elif data == 'admin_panel':
+        user_id = event.sender_id
+        if not is_admin(user_id):
+            await event.answer("❌ Admin only!", alert=True)
+            return
+
+        sites_count = len(load_sites())
+        proxies_count = len(load_proxies())
+        premium_count = len(load_premium_users())
+        credits_data = load_credits()
+        total_users = len(credits_data)
+
+        panel_text = f"""<b>🔑 ADMIN PANEL</b>
 <b>─────────────────────</b>
-
-<b>Overall:</b>
-<blockquote>⚡ Total Charged: {total_charged}
-💀 Total Approved: {total_approved}
-⬛ Total Dead: {total_dead}
-💳 Total Checks: {total_checks}</blockquote>
-
+<b>👥 Total Users:</b> {total_users}
+<b>💎 Premium Users:</b> {premium_count}
+<b>📊 Sites:</b> {sites_count}
+<b>🔌 Proxies:</b> {proxies_count}
+<b>🎯 Active Filter:</b> {SITE_FILTERS[ACTIVE_FILTER]['name']}
+<b>─────────────────────</b>
+<b>Admin Commands:</b>
+➡️ /addpremium user_id plan
+➡️ /removepremium user_id
+➡️ /addcredits user_id amount
+➡️ /removecredits user_id amount
+➡️ /ban user_id
+➡️ /unban user_id
+➡️ /genpremiumkey plan [qty]
+➡️ /gencreditkey credits [qty]
+➡️ /broadcast (reply to msg)
+➡️ /groupmode on|off
+➡️ /filter preset_name
+➡️ /site (check all sites)
+➡️ /addsite (multi-line)
+➡️ /addsitetxt (reply to .txt)
+➡️ /rm site_url
+➡️ /clearsite
+➡️ /proxy (check all proxies)
+➡️ /addproxy (multi-line)
+➡️ /addproxytxt (reply to .txt)
+➡️ /stats
+➡️ /ping
 <b>─────────────────────</b>
 🤖 <b>Bot By: <a href="tg://user?id=7415233736">BUBU</a></b>"""
-    
-    await event.reply(text, parse_mode='html')
 
-@bot.on(events.NewMessage(pattern=r'^/userlist(@\w+)?(?:\s|$)'))
-async def userlist_admin(event):
-    user_id = event.sender_id
-    if not is_admin(user_id):
-        return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
-    premium_data = load_premium_users()
-    if not premium_data:
-        return await event.reply("❌ No premium users.", parse_mode='html')
-    
-    text = f"<b>👥 Premium Users ({len(premium_data)})</b>\n<b>─────────────────────</b>\n\n"
-    
-    for uid, data in sorted(premium_data.items()):
-        expiry = data.get('expiry', 'Unknown')
-        plan_name = get_user_plan_name(int(uid))
-        if expiry != 'Unknown':
-            try:
-                expiry_dt = datetime.fromisoformat(expiry)
-                days_left = max(0, (expiry_dt - datetime.now()).days)
-                expiry_str = expiry_dt.strftime('%Y-%m-%d')
-            except:
-                days_left = 0
-                expiry_str = expiry
-        else:
-            days_left = 0
-            expiry_str = 'Unknown'
-        
-        text += f"<blockquote>👤 <code>{uid}</code> — {plan_name} — ⏳ {days_left}d left</blockquote>\n"
-    
-    text += f"\n<b>─────────────────────</b>\n🤖 <b>Bot By: <a href=\"tg://user?id=7415233736\">BUBU</a></b>"
-    
-    await event.reply(text, parse_mode='html')
+        await event.edit(panel_text, parse_mode='html')
 
-@bot.on(events.NewMessage(pattern=r'^/checkcredits(@\w+)?(\s+)?'))
-async def checkcredits_admin(event):
-    user_id = event.sender_id
-    if not is_admin(user_id):
-        return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
-    args = event.message.text.split()
-    if len(args) != 2:
-        return await event.reply("❌ Usage: <code>/checkcredits user_id</code>", parse_mode='html')
-    
-    try:
-        target_id = int(args[1])
-    except:
-        return await event.reply("❌ Invalid user_id", parse_mode='html')
-    
-    credits = get_user_credits(target_id)
-    plan_name = get_user_plan_name(target_id)
-    
-    await event.reply(f"<b>💰 User Credits</b>\n\n👤 User: <code>{target_id}</code>\n📋 Plan: {plan_name}\n💰 Credits: {credits}", parse_mode='html')
-
-@bot.on(events.NewMessage(pattern=r'^/setcredits(@\w+)?(\s+)?'))
-async def setcredits_admin(event):
-    user_id = event.sender_id
-    if not is_admin(user_id):
-        return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
-    args = event.message.text.split()
-    if len(args) != 3:
-        return await event.reply("❌ Usage: <code>/setcredits user_id amount</code>", parse_mode='html')
-    
-    try:
-        target_id = int(args[1])
-        amount = int(args[2])
-    except:
-        return await event.reply("❌ Invalid user_id or amount", parse_mode='html')
-    
-    credits_data = load_credits()
-    credits_data[str(target_id)] = amount
-    save_credits(credits_data)
-    
-    await event.reply(f"✅ <b>Credits Set!</b>\n\n👤 User: <code>{target_id}</code>\n💰 New Balance: {amount}", parse_mode='html')
-
-@bot.on(events.NewMessage(pattern=r'^/exportstats(@\w+)?(?:\s|$)'))
-async def exportstats_admin(event):
-    user_id = event.sender_id
-    if not is_admin(user_id):
-        return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
-    hit_data = load_hit_stats()
-    if not hit_data:
-        return await event.reply("❌ No hit data available.", parse_mode='html')
-    
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"hit_stats_export_{timestamp}.txt"
-    
-    with open(filename, 'w', encoding='utf-8') as f:
-        f.write("=" * 60 + "\n")
-        f.write("HIT STATISTICS EXPORT\n")
-        f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write("=" * 60 + "\n\n")
-        
-        for uid, stats in sorted(hit_data.items(), key=lambda x: x[1].get('charged', 0), reverse=True):
-            f.write(f"User: {uid}\n")
-            f.write(f"  Charged: {stats.get('charged', 0)}\n")
-            f.write(f"  Approved: {stats.get('approved', 0)}\n")
-            f.write(f"  Dead: {stats.get('dead', 0)}\n")
-            f.write(f"  Total: {stats.get('total', 0)}\n")
-            f.write("-" * 40 + "\n")
-    
-    await event.reply("✅ <b>Stats Exported!</b>", file=filename, parse_mode='html')
-    
-    try:
-        os.remove(filename)
-    except:
-        pass
-
-@bot.on(events.NewMessage(pattern=r'^/activecheck(@\w+)?(?:\s|$)'))
-async def activecheck_admin(event):
-    user_id = event.sender_id
-    if not is_admin(user_id):
-        return await event.reply("❌ <b>Admin only command!</b>", parse_mode='html')
-    
-    if not active_sessions:
-        return await event.reply("ℹ️ No active checking sessions right now.", parse_mode='html')
-    
-    text = f"<b>🔄 Active Checking Sessions ({len(active_sessions)})</b>\n<b>─────────────────────</b>\n\n"
-    
-    for sid, sdata in active_sessions.items():
-        status = sdata.get('status', 'unknown')
-        uid = sdata.get('user_id', 'unknown')
-        emoji = "⏸️" if status == 'paused' else "▶️"
-        text += f"<blockquote>{emoji} User: <code>{uid}</code> — Status: {status}</blockquote>\n"
-    
-    await event.reply(text, parse_mode='html')
-
-# ========== MAIN ==========
-async def main():
-    print("=" * 50)
-    print("DARK CHECKER BOT STARTING...")
-    print("=" * 50)
-    
-    await resolve_chat_ids()
-    
-    # Start background tasks
-    asyncio.create_task(cleanup_expired_users())
-    asyncio.create_task(auto_check_proxies())
-    asyncio.create_task(auto_check_sites())
-    
-    print("Bot is running...")
-    print("=" * 50)
-    
-    await bot.run_until_disconnected()
+    else:
+        await event.answer("Unknown action", alert=True)
 
 # ========== BACKGROUND TASKS ==========
+
 async def cleanup_expired_users():
     while True:
         try:
             premium_data = load_premium_users()
-            expired = []
-            for uid, data in premium_data.items():
+            now = datetime.now()
+            removed = 0
+            for uid, info in list(premium_data.items()):
                 try:
-                    expiry = datetime.fromisoformat(data['expiry'])
-                    if datetime.now() > expiry:
-                        expired.append(uid)
+                    expiry = datetime.fromisoformat(info['expiry'])
+                    if now > expiry:
+                        del premium_data[uid]
+                        removed += 1
                 except:
-                    expired.append(uid)
-            
-            if expired:
-                for uid in expired:
-                    del premium_data[uid]
+                    continue
+            if removed > 0:
                 save_premium_users(premium_data)
-                print(f"Cleaned up {len(expired)} expired premium users")
+                print(f"✅ Cleaned {removed} expired premium users")
         except Exception as e:
-            print(f"Cleanup error: {e}")
-        
-        await asyncio.sleep(3600)  # Run every hour
+            print(f"❌ Cleanup error: {e}")
+        await asyncio.sleep(3600)
 
 async def auto_check_proxies():
     while True:
-        await asyncio.sleep(7200)  # Every 2 hours
+        await asyncio.sleep(7200)
         try:
             proxies = load_proxies()
             if not proxies:
                 continue
-            
-            print(f"Auto-checking {len(proxies)} proxies...")
-            alive = []
-            dead = []
-            
-            for i in range(0, len(proxies), 10):
-                batch = proxies[i:i+10]
-                tasks = [test_proxy(p) for p in batch]
+
+            alive_proxies = []
+            dead_count = 0
+            batch_size = 10
+
+            for i in range(0, len(proxies), batch_size):
+                batch = proxies[i:i + batch_size]
+                tasks = [test_proxy(proxy) for proxy in batch]
                 results = await asyncio.gather(*tasks)
+
                 for res in results:
                     if res['status'] == 'alive':
-                        alive.append(res['proxy'])
+                        alive_proxies.append(res['proxy'])
                     else:
-                        dead.append(res['proxy'])
-            
+                        dead_count += 1
+
             async with aiofiles.open(PROXY_FILE, 'w') as f:
-                for p in alive:
-                    await f.write(f"{p}\n")
-            
-            print(f"Auto proxy check: {len(alive)} alive, {len(dead)} removed")
+                for proxy in alive_proxies:
+                    await f.write(f"{proxy}\n")
+
+            print(f"✅ Auto proxy check: {len(alive_proxies)} alive, {dead_count} removed")
         except Exception as e:
-            print(f"Auto proxy check error: {e}")
+            print(f"❌ Auto proxy check error: {e}")
 
 async def auto_check_sites():
     while True:
-        await asyncio.sleep(10800)  # Every 3 hours
+        await asyncio.sleep(10800)
         try:
             sites = load_sites()
-            if not sites:
-                continue
-            
             proxies = load_proxies()
-            if not proxies:
+            if not sites or not proxies:
                 continue
-            
-            print(f"Auto-checking {len(sites)} sites...")
-            alive = []
-            dead = []
-            
-            for i in range(0, len(sites), 10):
-                batch = sites[i:i+10]
-                fresh_proxies = load_proxies()
-                if not fresh_proxies:
-                    fresh_proxies = proxies
-                tasks = [test_site(s, random.choice(fresh_proxies)) for s in batch]
+
+            alive_sites = []
+            dead_count = 0
+            batch_size = 10
+
+            for i in range(0, len(sites), batch_size):
+                batch = sites[i:i + batch_size]
+                tasks = [test_site(s, random.choice(proxies)) for s in batch]
                 results = await asyncio.gather(*tasks)
+
                 for res in results:
                     if res['status'] == 'alive':
-                        alive.append(res['site'])
+                        alive_sites.append(res['site'])
                     else:
-                        dead.append(res['site'])
-            
+                        dead_count += 1
+
             async with aiofiles.open(SITES_FILE, 'w') as f:
-                for s in alive:
-                    await f.write(f"{s}\n")
-            
-            print(f"Auto site check: {len(alive)} alive, {len(dead)} removed")
+                for site in alive_sites:
+                    await f.write(f"{site}\n")
+
+            print(f"✅ Auto site check: {len(alive_sites)} alive, {dead_count} removed")
         except Exception as e:
-            print(f"Auto site check error: {e}")
+            print(f"❌ Auto site check error: {e}")
+
+# ========== MAIN ==========
+async def main():
+    os.makedirs('sessions', exist_ok=True)
+
+    # Start the bot (async)
+    await bot.start(bot_token=BOT_TOKEN)
+
+    # Resolve required chat IDs
+    await resolve_chat_ids()
+
+    # Start background tasks
+    asyncio.create_task(cleanup_expired_users())
+    asyncio.create_task(auto_check_proxies())
+    asyncio.create_task(auto_check_sites())
+
+    print("🤖 DARK CHECKER BOT is running...")
+    print(f"📊 Sites loaded: {len(load_sites())}")
+    print(f"🔌 Proxies loaded: {len(load_proxies())}")
+    print(f"💎 Premium users: {len(load_premium_users())}")
+
+    # Keep running
+    await bot.run_until_disconnected()
 
 if __name__ == "__main__":
     asyncio.run(main())
